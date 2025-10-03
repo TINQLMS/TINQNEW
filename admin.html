@@ -430,17 +430,26 @@ function renderNotifications(user){
   const count = (user.notifications||[]).filter(n=>!n.read).length;
   document.getElementById('unreadCount').innerText = count? String(count):'';
   list.innerHTML = '';
-  (user.notifications||[]).slice().reverse().forEach(n=>{
-    const div = document.createElement('div');
-    div.className = 'notif-item';
-    div.innerText = `${new Date(n.timestamp).toLocaleString()} - ${n.message}`;
-    list.appendChild(div);
-  });
+  const items = (user.notifications||[]).slice().reverse();
+  if(!items.length){
+    const empty = document.createElement('div');
+    empty.className = 'notif-item';
+    empty.innerText = 'No notifications';
+    list.appendChild(empty);
+  } else {
+    items.forEach(n=>{
+      const div = document.createElement('div');
+      div.className = 'notif-item';
+      div.innerText = `${new Date(n.timestamp).toLocaleString()} - ${n.message}`;
+      list.appendChild(div);
+    });
+  }
 }
 function toggleNotifList(){
   const list = document.getElementById('notifList');
   const bell = document.getElementById('notifBell');
   const show = getComputedStyle(list).display === 'none';
+  if(show && window.__currentAdmin){ renderNotifications(window.__currentAdmin); }
   list.style.display = show ? 'block':'none';
   bell.setAttribute('aria-expanded', show? 'true':'false');
   if(show && window.__currentAdmin){
@@ -455,7 +464,16 @@ function toggleNotifList(){
     }
   }
 }
-document.getElementById('notifBell').addEventListener('click', toggleNotifList);
+// Open/close behavior with outside click and ESC
+const __notifBellEl = document.getElementById('notifBell');
+const __notifListEl = document.getElementById('notifList');
+function closeNotifList(){ __notifListEl.style.display='none'; __notifBellEl.setAttribute('aria-expanded','false'); }
+__notifBellEl.addEventListener('click', (e)=>{ e.stopPropagation(); toggleNotifList(); });
+__notifListEl.addEventListener('click', (e)=> e.stopPropagation());
+document.addEventListener('click', (e)=>{
+  if(!__notifBellEl.contains(e.target) && !__notifListEl.contains(e.target)) closeNotifList();
+});
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeNotifList(); });
 
 // ===== Stats =====
 async function updateStats(){
