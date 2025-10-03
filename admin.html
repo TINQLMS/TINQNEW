@@ -98,6 +98,7 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
       <button data-view="resets"><span>🔁</span><span class="cap">Password Resets</span><span class="badge" id="badgePending">0</span></button>
       <button data-view="users"><span>👥</span><span class="cap">Users</span></button>
       <button data-view="analytics"><span>📈</span><span class="cap">Analytics</span></button>
+      <button data-view="sysadmin"><span>🛡️</span><span class="cap">System & Admin Control</span></button>
     </div>
     <div class="footer-cta">
       <button id="logoutBtnAside">Logout</button>
@@ -194,9 +195,18 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
         <div id="analyticsContainer"></div>
       </section>
 
-      <!-- Maintenance -->
-      <section>
-        <h3>Maintenance</h3>
+      <!-- System & Admin Control -->
+      <section data-view="sysadmin" class="hidden">
+        <h3>System & Admin Control</h3>
+        <div class="card" style="margin-bottom:12px">
+          <div class="small-muted">Quick actions</div>
+          <div class="action-grid" style="margin-top:8px">
+            <button id="btnReloadStats" class="secondary">Reload Stats</button>
+            <button id="btnExportAll" class="secondary">Export All Data (JSON)</button>
+            <button id="btnClearSessions" class="danger">Clear All Sessions</button>
+          </div>
+        </div>
+        <h3 style="margin-top:0">Maintenance</h3>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
           <div class="card">
             <div class="small-muted">Immediate maintenance</div>
@@ -403,6 +413,7 @@ function switchView(view){
   if(view==='resets') renderResetRequests();
   if(view==='users') renderUsers();
   if(view==='analytics') renderAnalytics();
+  if(view==='sysadmin') initMaintenanceUI();
 }
 
 document.querySelectorAll('.nav button').forEach(btn=>{
@@ -1029,6 +1040,22 @@ async function notifyAllUsers(message){
   });
   await Storage.saveUsers(users);
 }
+
+// Quick actions
+document.getElementById('btnReloadStats')?.addEventListener('click', updateStats);
+document.getElementById('btnExportAll')?.addEventListener('click', async ()=>{
+  const [users, assignments, submissions] = await Promise.all([
+    Storage.getUsers(), Storage.getAssignments(), Storage.getSubmissions()
+  ]);
+  const blob = new Blob([JSON.stringify({ users, assignments, submissions }, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`smartlms_export_${Date.now()}.json`; a.click();
+});
+document.getElementById('btnClearSessions')?.addEventListener('click', async ()=>{
+  if(!confirm('Clear all active sessions? Non-admins will be logged out.')) return;
+  const db = await openDB(); if(!db) return;
+  await new Promise((resolve)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').clear(); tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve(); });
+  alert('All sessions cleared');
+});
 
 async function showMaintenanceBanner(){
   const m = await getMaintenance();
