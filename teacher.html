@@ -275,28 +275,7 @@
         </div>
       </div>
 
-      <!-- Notifications View (teacher) -->
-      <div id="view-notifications" class="view" style="display:none">
-        <div class="card">
-          <div class="small-muted">All Notifications</div>
-          <div id="allNotifs" style="max-height:520px;overflow:auto;margin-top:8px"></div>
-        </div>
-      </div>
-
-      <!-- Settings -->
-      <div id="view-settings" class="view" style="display:none">
-        <div class="card">
-          <h3>Account</h3>
-          <div class="small-muted">Manage your profile</div>
-          <div style="margin-top:8px">
-            <label class="label">Name</label>
-            <input id="teacherNameInput" class="input" />
-            <div style="margin-top:8px">
-              <button class="button" id="saveProfileBtn">Save Profile</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      
 
     </main>
 
@@ -1598,10 +1577,8 @@ function loadInitialDataIfEmpty(cb){
   await requireTeacher(async ()=>{
     loadInitialDataIfEmpty(()=>{
       renderAssignmentsTable(); refreshSubmissionsTable(); renderRecentActivities(); renderOverview(); refreshNotifUI();
-      document.getElementById('btnNewAssignment').addEventListener('click', ()=> document.getElementById('createAssignmentBtn').click());
-      document.getElementById('btnOpenGrading').addEventListener('click', ()=> { navLinks.forEach(x=> x.classList.remove('active')); document.querySelector('[data-view="grading"]').classList.add('active'); showView('grading'); });
-      document.getElementById('saveProfileBtn').addEventListener('click', ()=>{ const newName = document.getElementById('teacherNameInput').value.trim(); readUsers(users=>{ const u = users.find(x=> (x.email||'').toLowerCase()===currentEmail); if(u){ u.fullName = newName; writeUsers(users, ()=>{ addActivity('Updated profile'); document.getElementById('teacherName').innerText = newName; alert('Saved'); }); } }); });
-      document.getElementById('logoutBtn').addEventListener('click', async ()=> { await clearCurrentUser(); window.location.href='index.html'; });
+      const newBtn = document.getElementById('btnNewAssignment'); if(newBtn){ newBtn.addEventListener('click', ()=> document.getElementById('createAssignmentBtn').click()); }
+      const openGr = document.getElementById('btnOpenGrading'); if(openGr){ openGr.addEventListener('click', ()=> { navLinks.forEach(x=> x.classList.remove('active')); document.querySelector('[data-view="grading"]').classList.add('active'); showView('grading'); }); }
       // Do not auto-insert demo questions
       showView('overview');
     });
