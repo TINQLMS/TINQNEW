@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SmartLMS — Teacher Dashboard (Enhanced Grading)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{--purple:#5b2ea6;--muted:#f3f3f6;--card:#fff;--text:#222}
+  body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:#f4f6f8;color:var(--text)}
+  .app{display:flex;min-height:100vh;gap:20px}
+  /* Sidebar */
+  .sidebar{width:260px;background:#fff;border-right:1px solid #e6e9ee;padding:18px;box-sizing:border-box;display:flex;flex-direction:column}
+  .brand{font-weight:700;color:var(--purple);font-size:18px;margin-bottom:8px}
+  nav a{display:flex;align-items:center;padding:10px;border-radius:6px;color:#333;text-decoration:none;margin-bottom:6px}
+  nav a.active, nav a:hover{background:var(--muted)}
+  .nav-title{font-size:12px;color:#666;margin-top:8px;margin-bottom:6px}
+  /* Main */
+  .main{flex:1;display:flex;flex-direction:column}
+  header{min-height:60px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid #e6e9ee}
+  header h1{font-size:18px;margin:0;display:flex;align-items:center;gap:8px}
+  .menu-btn{display:none;background:#f3f3f6;border:1px solid #e6e9ee;border-radius:6px;padding:8px 10px}
+  .notif{position:relative;cursor:pointer}
+  .unread-badge{position:absolute;top:-6px;right:-6px;background:#e02424;color:#fff;border-radius:999px;padding:3px 7px;font-size:12px}
+  .notif-list{position:absolute;right:20px;top:60px;width:360px;background:#fff;border:1px solid #e6e9ee;border-radius:6px;box-shadow:0 6px 30px rgba(0,0,0,0.06);max-height:360px;overflow:auto;padding:8px;display:none;z-index:50}
+  .notif-item{padding:8px;border-bottom:1px solid #f0f0f0;font-size:13px}
+  /* content layout */
+  .content{flex:1;padding:12px;overflow:auto}
+  .grid{display:grid;gap:16px}
+  .cols-3{grid-template-columns:1fr 420px}
+  .card{background:var(--card);border:1px solid #eaeff5;padding:14px;border-radius:8px;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
+  .small{font-size:13px;color:#666}
+  .button{background:var(--purple);color:#fff;padding:8px 12px;border-radius:6px;border:none;cursor:pointer}
+  .muted{color:#666}
+  table{width:100%;border-collapse:collapse}
+  thead th{background:#fafbfc;text-align:left;padding:8px;border-bottom:1px solid #eee;font-weight:600}
+  tbody td{padding:8px;border-bottom:1px solid #f3f5f8}
+  .action-btn{padding:6px 8px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  .form-row{display:flex;gap:8px}
+  .input,textarea,select{width:100%;padding:8px;border:1px solid #d9e0ea;border-radius:6px;background:#fff}
+  .question{border:1px dashed #e6e9ee;padding:10px;border-radius:6px;margin-bottom:8px;background:#fafafa}
+  .hint{font-size:13px;color:#2b2b2b;background:#fff8e6;padding:6px;border-radius:4px;margin-top:8px;border:1px solid #ffe9a8}
+  .explanation{font-size:13px;color:#0b3b2e;background:#e8fff5;padding:6px;border-radius:4px;margin-top:6px;border:1px solid #c8f3dc;display:none}
+  .flex{display:flex;gap:10px;align-items:center}
+  .small-muted{font-size:12px;color:#777}
+  .danger{color:#b32d2d}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal{width:900px;background:#fff;border-radius:8px;padding:16px;max-height:80vh;overflow:auto}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .recent-item{font-size:13px;padding:6px;border-bottom:1px solid #f0f0f0}
+  .label{font-size:12px;color:#666}
+  .badge{display:inline-block;background:#eef2ff;color:var(--purple);padding:2px 8px;border-radius:999px;font-size:12px}
+  footer{height:40px;background:#fff;border-top:1px solid #e6e9ee;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .small-note{font-size:12px;color:#444}
+  .grid-questions{display:grid;gap:8px}
+  .controls-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  @media(max-width:980px){
+    .menu-btn{display:inline-block}
+    .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .2s ease;z-index:200;display:flex;width:80vw;max-width:320px}
+    .sidebar.open{transform:translateX(0)}
+    .cols-3{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar card" id="sidebar">
+    <div class="brand">SmartLMS — Teacher</div>
+    <div class="small-muted">Welcome, <span id="teacherName">Teacher</span></div>
+    <div class="nav-title">Navigate</div>
+    <nav id="nav">
+      <a href="#" data-view="overview" class="active">🏠 Overview</a>
+      <a href="#" data-view="assignments">📝 Assignments</a>
+      <a href="#" data-view="grading">📥 Grading Hub</a>
+      <a href="#" data-view="notifications">🔔 Notifications</a>
+      <a href="#" data-view="settings">⚙️ Settings</a>
+    </nav>
+
+    <div style="margin-top:auto">
+      <div class="small-muted" style="margin-bottom:6px">Recent activities</div>
+      <div id="sidebarRecent" style="max-height:180px;overflow:auto"></div>
+      <div style="margin-top:8px">
+        <button id="logoutBtn" class="button" style="width:100%">Log out</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <section class="main">
+    <header>
+      <h1><button class="menu-btn" id="menuBtn">☰</button> Teacher Dashboard</h1>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="notif" id="notifBell">
+          🔔 <span id="notifUnread" class="unread-badge" style="display:none">0</span>
+        </div>
+      </div>
+      <div class="notif-list card" id="notifList"></div>
+    </header>
+
+    <main class="content">
+      <!-- Overview -->
+      <div id="view-overview" class="view">
+        <div class="grid cols-3">
+          <div>
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div class="small-muted">Assignments</div>
+                  <div style="font-size:24px" id="statAssignments">0</div>
+                </div>
+                <div>
+                  <div class="small-muted">Pending</div>
+                  <div style="font-size:20px" id="statPending">0</div>
+                </div>
+              </div>
+              <hr />
+              <div class="small-muted">Overview</div>
+              <div id="overviewRecent"></div>
+            </div>
+
+            <div style="margin-top:12px" class="card">
+              <div class="small-muted">Recent Activities</div>
+              <div id="recentActivities" style="max-height:260px;overflow:auto;margin-top:8px"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="small-muted">Quick Actions</div>
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <button class="button" id="btnNewAssignment">Create assignment</button>
+                <button class="button" id="btnOpenGrading">Open grading hub</button>
+              </div>
+            </div>
+
+            <div style="margin-top:12px" class="card">
+              <div class="small-muted">Notifications</div>
+              <div id="overviewNotifs" style="max-height:200px;overflow:auto;margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assignments -->
+      <div id="view-assignments" class="view" style="display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:320px">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <div><strong>Your Assignments</strong><div class="small">Manage publish windows, reopen, edit or delete</div></div>
+                <div><button class="button" id="createAssignmentBtn">New Assignment</button></div>
+              </div>
+              <hr />
+              <table>
+                <thead><tr><th>Title</th><th>Publish</th><th>Unpublish (Deadline)</th><th>Group?</th><th>Actions</th></tr></thead>
+                <tbody id="assignmentsTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="width:420px;max-width:100%">
+            <div class="card">
+              <div class="small-muted">Assignment Editor</div>
+              <div style="margin-top:8px">
+                <label class="label">Title</label>
+                <input id="assignTitle" class="input" />
+                <label class="label">Description</label>
+                <textarea id="assignDesc" class="input" rows="4"></textarea>
+                <div class="form-row" style="margin-top:8px">
+                  <div style="flex:1">
+                    <label class="label">Publish (date & time)</label>
+                    <input id="assignPublish" type="datetime-local" class="input" />
+                  </div>
+                  <div style="flex:1">
+                    <label class="label">Unpublish / Deadline (date & time)</label>
+                    <input id="assignUnpublish" type="datetime-local" class="input" />
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+                  <label><input type="checkbox" id="assignGroup"/> Group assignment</label>
+                  <label style="margin-left:auto">Total points <input id="assignPoints" type="number" value="100" style="width:90px" /></label>
+                </div>
+
+                <hr />
+                <div id="questionsList"></div>
+                <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                  <button class="button" id="addQuestionBtn">+ Add Question</button>
+                  <button class="button" id="saveAssignmentBtn">Save Assignment</button>
+                </div>
+                <p class="small-muted" style="margin-top:8px">Hints show with questions. Explanations appear only after grading.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grading Hub -->
+      <div id="view-grading" class="view" style="display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:320px">
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <div><strong>Submissions</strong><div class="small">Click a submission to open details</div></div>
+                <div><button class="button" id="refreshSubmissions">Refresh</button></div>
+              </div>
+              <hr />
+              <table>
+                <thead><tr><th>User</th><th>Assignment</th><th>Submitted</th><th>Status</th><th>Score</th><th>Actions</th></tr></thead>
+                <tbody id="submissionsTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="width:420px;max-width:100%">
+            <div id="submissionPanel" class="card" style="display:none">
+              <div class="topbar">
+                <div>
+                  <div id="subStudent" style="font-weight:700"></div>
+                  <div class="small-muted" id="subMeta"></div>
+                </div>
+                <div class="flex">
+                  <button class="action-btn" id="editFeedbackBtn">Edit Submission (feedback copy)</button>
+                  <button class="action-btn" id="lockToggleBtn">Lock</button>
+                </div>
+              </div>
+
+              <div id="assignmentView"></div>
+
+              <hr />
+              <div>
+                <div class="controls-row">
+                  <label class="small-note">Late penalty: <input id="latePenaltyInput" type="number" value="10" style="width:70px"/>% (applies to total)</label>
+                  <button class="button" id="saveGradeBtn">Save Grade & Notify</button>
+                  <button class="button" id="releaseAllExplanationsBtn">Reveal All Explanations</button>
+                  <button class="button" id="regradeBtn" style="background:#ff9800">Regrade (unlock)</button>
+                </div>
+                <textarea id="explainInput" class="input" rows="3" placeholder="Optional general feedback to student" style="margin-top:10px"></textarea>
+                <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="action-btn" id="sendFeedbackOnlyBtn">Send Feedback Only</button></div>
+                <div style="margin-top:10px" id="gradeSummary"></div>
+                <div id="gradeHistory" style="margin-top:8px"></div>
+              </div>
+            </div>
+
+            <div id="noSubmission" class="card" style="display:block">Select a submission to view details</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications View (teacher) -->
+      <div id="view-notifications" class="view" style="display:none">
+        <div class="card">
+          <div class="small-muted">All Notifications</div>
+          <div id="allNotifs" style="max-height:520px;overflow:auto;margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div id="view-settings" class="view" style="display:none">
+        <div class="card">
+          <h3>Account</h3>
+          <div class="small-muted">Manage your profile</div>
+          <div style="margin-top:8px">
+            <label class="label">Name</label>
+            <input id="teacherNameInput" class="input" />
+            <div style="margin-top:8px">
+              <button class="button" id="saveProfileBtn">Save Profile</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <footer>SmartLMS — Teacher view</footer>
+  </section>
+</div>
+
+<!-- Feedback modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="topbar">
+      <div><strong>Edit Feedback Copy</strong><div class="small-muted" id="feedbackFor"></div></div>
+      <div><button id="closeModal" class="action-btn">Close</button></div>
+    </div>
+    <div id="feedbackEditor"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="button" id="saveFeedbackCopy">Save & Send to Student</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------------------
+  Storage & Sessions (IndexedDB with fallback)
+----------------------------*/
+const supportsIndexedDB = typeof indexedDB !== 'undefined';
+const DB_NAME = 'smartlms-auth';
+const DB_VERSION = 2; // v2 adds per-tab sessions
+let dbInstance = null;
+
+function openDB() {
+  return new Promise((resolve) => {
+    if (!supportsIndexedDB) { resolve(null); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('users')) { const s = db.createObjectStore('users', { keyPath: 'email' }); s.createIndex('email','email',{unique:true}); }
+      if (!db.objectStoreNames.contains('meta')) { db.createObjectStore('meta', { keyPath: 'key' }); }
+      if (!db.objectStoreNames.contains('sessions')) { db.createObjectStore('sessions', { keyPath: 'id' }); }
+      if (!db.objectStoreNames.contains('assignments')) { db.createObjectStore('assignments', { keyPath: 'id' }); }
+      if (!db.objectStoreNames.contains('submissions')) { db.createObjectStore('submissions', { keyPath: ['assignmentId','student'] }); }
+      if (!db.objectStoreNames.contains('feedbackCopies')) { db.createObjectStore('feedbackCopies', { keyPath: 'id' }); }
+      if (!db.objectStoreNames.contains('activities')) { db.createObjectStore('activities', { keyPath: 'id' }); }
+    };
+    req.onsuccess = () => { dbInstance = req.result; resolve(dbInstance); };
+    req.onerror = () => { console.error('DB open error', req.error); resolve(null); };
+  });
+}
+
+async function idbGetAll(store) {
+  const db = await openDB();
+  if (!db) return JSON.parse(localStorage.getItem(store)) || [];
+  return new Promise((resolve) => {
+    const tx = db.transaction(store,'readonly');
+    const st = tx.objectStore(store);
+    const r = st.getAll();
+    r.onsuccess = () => resolve(r.result || []);
+    r.onerror = () => resolve([]);
+  });
+}
+async function idbPutAll(store, items) {
+  const db = await openDB();
+  if (!db) { localStorage.setItem(store, JSON.stringify(items||[])); return; }
+  return new Promise((resolve) => {
+    const tx = db.transaction(store,'readwrite');
+    const st = tx.objectStore(store);
+    st.clear();
+    (items||[]).forEach(it => st.put(it));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
+async function migrateLocalStorageToIDBIfNeeded(){
+  if(!supportsIndexedDB) return;
+  try {
+    const existingUsers = await idbGetAll('users');
+    if (existingUsers && existingUsers.length > 0) return;
+    const stores = ['users','assignments','submissions','feedbackCopies','activities'];
+    for (const s of stores) {
+      const raw = localStorage.getItem(s);
+      if (raw) {
+        try { const arr = JSON.parse(raw) || []; if (arr.length) await idbPutAll(s, arr); } catch(_){}
+      }
+    }
+    // Do not remove LS completely to preserve student pages not yet migrated, but avoid divergence for users
+    localStorage.removeItem('users');
+  } catch(e){ console.warn('migration failed', e); }
+}
+
+// Per-tab session helpers
+function getSessionId(){
+  let sid = sessionStorage.getItem('sessionId');
+  if(!sid){ sid = 's_'+Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem('sessionId', sid); }
+  return sid;
+}
+async function setCurrentUser(user){
+  const sid = getSessionId();
+  if(supportsIndexedDB){
+    try{
+      const db = await openDB();
+      if(db){ await new Promise((resolve)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').put({id:sid,user}); tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve(); }); return; }
+    }catch(_){ }
+  }
+  sessionStorage.setItem('currentUser', JSON.stringify(user));
+}
+async function getCurrentUser(){
+  const sid = getSessionId();
+  if(supportsIndexedDB){
+    try{
+      const db = await openDB();
+      if(db){ return await new Promise((resolve)=>{ const tx=db.transaction('sessions','readonly'); const r=tx.objectStore('sessions').get(sid); r.onsuccess=()=>resolve(r.result? r.result.user:null); r.onerror=()=>resolve(null); }); }
+    }catch(_){ }
+  }
+  const raw = sessionStorage.getItem('currentUser');
+  return raw? JSON.parse(raw) : null;
+}
+async function clearCurrentUser(){
+  const sid = getSessionId();
+  if(supportsIndexedDB){
+    try{ const db=await openDB(); if(db){ await new Promise((resolve)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').delete(sid); tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve(); }); } }catch(_){ }
+  }
+  sessionStorage.removeItem('currentUser');
+}
+
+// Convenience wrappers with callback API for existing code
+function readUsers(cb){ idbGetAll('users').then(cb); }
+function writeUsers(users, cb){ idbPutAll('users', users).then(()=>cb && cb()); }
+function readAssignments(cb){ idbGetAll('assignments').then(cb); }
+function writeAssignments(items, cb){ idbPutAll('assignments', items).then(()=>cb && cb()); }
+function readSubmissions(cb){ idbGetAll('submissions').then(cb); }
+function writeSubmissions(items, cb){ idbPutAll('submissions', items).then(()=>cb && cb()); }
+function readFeedbacks(cb){ idbGetAll('feedbackCopies').then(cb); }
+function writeFeedbacks(items, cb){ idbPutAll('feedbackCopies', items).then(()=>cb && cb()); }
+function readActivities(cb){ idbGetAll('activities').then(cb); }
+function writeActivities(items, cb){ idbPutAll('activities', items).then(()=>cb && cb()); }
+
+/* ---------------------------
+  Session & RBAC (per tab)
+----------------------------*/
+let currentTeacher = null; let currentEmail = null;
+async function requireTeacher(cb){
+  // Legacy migration: if old LS currentUser exists or currentUserEmail exists, try to hydrate session once
+  try{
+    const legacyObj = localStorage.getItem('currentUser');
+    if(legacyObj){ const parsed = JSON.parse(legacyObj); await setCurrentUser(parsed); localStorage.removeItem('currentUser'); }
+    const legacyEmail = localStorage.getItem('currentUserEmail');
+    if(legacyEmail){ const email=legacyEmail.toLowerCase(); readUsers(users=>{ const u=users.find(x=>x.email===email); if(u){ setCurrentUser(u).then(()=>{}); } localStorage.removeItem('currentUserEmail'); }); }
+  }catch(_){ }
+
+  const user = await getCurrentUser();
+  if(!user){ alert('Access denied — please login'); window.location.href='index.html'; return; }
+  if(user.role !== 'teacher'){ alert('Access denied — teacher only'); window.location.href='index.html'; return; }
+  if(user.active === false){ alert('Your account has been deactivated'); window.location.href='index.html'; return; }
+  currentTeacher = user; currentEmail = (user.email||'').toLowerCase();
+  document.getElementById('teacherName').innerText = user.fullName || 'Teacher';
+  document.getElementById('teacherNameInput').value = user.fullName || '';
+  if(cb) cb(user);
+}
+
+/* ---------------------------
+  Mobile nav
+----------------------------*/
+const sidebarEl = document.getElementById('sidebar');
+document.getElementById('menuBtn').addEventListener('click', ()=> sidebarEl.classList.toggle('open'));
+
+/* ---------------------------
+  UI navigation
+----------------------------*/
+const navLinks = document.querySelectorAll('#nav a');
+navLinks.forEach(a=> a.addEventListener('click', e=>{
+  e.preventDefault();
+  navLinks.forEach(x=>x.classList.remove('active'));
+  a.classList.add('active');
+  const v = a.dataset.view;
+  showView(v);
+}));
+function showView(view){
+  document.querySelectorAll('.view').forEach(v=> v.style.display='none');
+  const el = document.getElementById('view-' + view);
+  if(el) el.style.display = 'block';
+  navLinks.forEach(x=> x.classList.toggle('active', x.dataset.view === view));
+}
+
+/* ---------------------------
+  Notifications
+----------------------------*/
+function pushNotificationToUser(email, message){
+  readUsers(users=>{
+    const u = users.find(x=> (x.email||'').toLowerCase() === (email||'').toLowerCase());
+    if(!u) return;
+    u.notifications = u.notifications || [];
+    u.notifications.push({id:Date.now()+Math.random(), message, timestamp:Date.now(), read:false});
+    writeUsers(users, ()=>{ addActivity(`Notification sent to ${email}: ${message}`); refreshNotifUI(); });
+  });
+}
+
+function refreshNotifUI(){
+  if(!currentTeacher) return;
+  readUsers(users=>{
+    const me = users.find(u=> (u.email||'').toLowerCase() === currentEmail);
+    const notifs = (me && me.notifications) ? me.notifications.slice().reverse() : [];
+    const unread = notifs.filter(n=>!n.read).length;
+    const ub = document.getElementById('notifUnread');
+    if(unread>0){ ub.innerText = unread; ub.style.display='inline-block'; } else ub.style.display='none';
+    const list = document.getElementById('notifList');
+    list.innerHTML = notifs.map(n=>`<div class="notif-item" data-id="${n.id}"><div style="font-size:13px">${escapeHtml(n.message)}</div><div class="small-muted">${new Date(n.timestamp).toLocaleString()}</div></div>`).join('');
+  });
+}
+document.getElementById('notifBell').addEventListener('click', ()=>{
+  const nl = document.getElementById('notifList');
+  nl.style.display = nl.style.display === 'block' ? 'none' : 'block';
+  readUsers(users=>{
+    const me = users.find(u=> (u.email||'').toLowerCase() === currentEmail);
+    if(me && me.notifications){
+      me.notifications.forEach(n=> n.read = true);
+      writeUsers(users, ()=> refreshNotifUI());
+    }
+  });
+});
+
+/* ---------------------------
+  Activities
+----------------------------*/
+function addActivity(text){
+  readActivities(arr=>{
+    arr = arr || [];
+    arr.push({id:Date.now()+Math.random(), text, ts:Date.now()});
+    if(arr.length>200) arr.shift();
+    writeActivities(arr, ()=> renderRecentActivities());
+  });
+}
+function renderRecentActivities(){
+  readActivities(arr=>{
+    const list = document.getElementById('recentActivities');
+    const sidebar = document.getElementById('sidebarRecent');
+    if(!arr || arr.length===0){ list.innerHTML = '<div class="small-muted">No recent activity</div>'; sidebar.innerHTML=''; return; }
+    const rev = arr.slice().reverse();
+    list.innerHTML = rev.slice(0,50).map(a=>`<div class="recent-item">${new Date(a.ts).toLocaleString()} — ${escapeHtml(a.text)}</div>`).join('');
+    sidebar.innerHTML = rev.slice(0,6).map(a=>`<div class="recent-item">${escapeHtml(a.text)}</div>`).join('');
+  });
+}
+
+/* ---------------------------
+  Assignments UI & logic
+----------------------------*/
+let editingAssignmentId = null;
+function newQuestionBlock(q){
+  const id = 'q_'+(Math.random().toString(36).slice(2,8));
+  const container = document.createElement('div');
+  container.className = 'question';
+  container.dataset.qid = id;
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Question</strong>
+      <button class="action-btn removeQuestion">Remove</button>
+    </div>
+    <textarea class="qtext input" rows="2" placeholder="Question text">${q?.text||''}</textarea>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <select class="qtype input" style="width:160px">
+        <option value="essay">Essay</option>
+        <option value="file">File upload</option>
+        <option value="link">Link</option>
+      </select>
+      <input class="qpoints input" placeholder="Points" style="width:120px" value="${q?.points||10}" />
+    </div>
+    <div style="margin-top:6px">
+      <label class="label">Hint (visible with question)</label>
+      <textarea class="qhint input" rows="2" placeholder="Hint">${q?.hint||''}</textarea>
+      <label class="label">Explanation (visible after grading)</label>
+      <textarea class="qexp input" rows="2" placeholder="Explanation">${q?.explanation||''}</textarea>
+    </div>
+  `;
+  container.querySelector('.removeQuestion').addEventListener('click', ()=>{ container.remove(); });
+  if(q?.type) container.querySelector('.qtype').value = q.type;
+  return container;
+}
+
+document.getElementById('addQuestionBtn').addEventListener('click', ()=>{ document.getElementById('questionsList').appendChild(newQuestionBlock()); });
+
+// Save assignment
+document.getElementById('saveAssignmentBtn').addEventListener('click', ()=>{
+  const title = document.getElementById('assignTitle').value.trim();
+  const desc = document.getElementById('assignDesc').value.trim();
+  const publish = document.getElementById('assignPublish').value;
+  const unpublish = document.getElementById('assignUnpublish').value;
+  const group = document.getElementById('assignGroup').checked;
+  const totalPoints = Number(document.getElementById('assignPoints').value) || 100;
+
+  if(!title || !publish || !unpublish){ alert('Please provide title, publish and unpublish times'); return; }
+  const publishTs = new Date(publish).getTime();
+  const unpublishTs = new Date(unpublish).getTime();
+  if(isNaN(publishTs) || isNaN(unpublishTs) || unpublishTs <= publishTs){ alert('Please ensure publish < unpublish'); return; }
+
+  const qNodes = Array.from(document.querySelectorAll('#questionsList .question'));
+  if(qNodes.length===0){ if(!confirm('No questions added. Continue?')) return; }
+  const questions = qNodes.map(qn=>{
+    return {
+      id: qn.dataset.qid,
+      text: qn.querySelector('.qtext').value,
+      type: qn.querySelector('.qtype').value,
+      points: Number(qn.querySelector('.qpoints').value) || 0,
+      hint: qn.querySelector('.qhint').value,
+      explanation: qn.querySelector('.qexp').value
+    };
+  });
+
+  readAssignments(assigns=>{
+    if(!assigns) assigns=[];
+    const id = editingAssignmentId || ('a_'+Date.now());
+    const assignment = {
+      id,
+      title, description:desc,
+      publishTs, unpublishTs,
+      totalPoints,
+      questions,
+      groupRequired: group,
+      createdBy: currentEmail,
+      archived: false,
+      versions: []
+    };
+    const existing = assigns.find(a=>a.id===id);
+    if(existing){
+      assignment.versions = existing.versions || [];
+      assigns = assigns.map(a=> a.id===id?assignment:a);
+      addActivity(`Edited assignment "${title}"`);
+    } else {
+      assigns.push(assignment);
+      addActivity(`Created assignment "${title}"`);
+    }
+    writeAssignments(assigns, ()=> {
+      alert('Assignment saved');
+      editingAssignmentId = null;
+      renderAssignmentsTable();
+    });
+  });
+});
+
+document.getElementById('createAssignmentBtn').addEventListener('click', ()=>{
+  editingAssignmentId = null;
+  document.getElementById('assignTitle').value='';
+  document.getElementById('assignDesc').value='';
+  document.getElementById('questionsList').innerHTML='';
+  document.getElementById('assignGroup').checked=false;
+  document.getElementById('assignPublish').value = new Date().toISOString().slice(0,16);
+  document.getElementById('assignUnpublish').value = new Date(Date.now()+3600*1000).toISOString().slice(0,16);
+  showView('assignments');
+});
+
+function renderAssignmentsTable(){
+  readAssignments(assigns=>{
+    assigns = (assigns||[]).filter(a=> a.createdBy === currentEmail);
+    const tbody = document.getElementById('assignmentsTable');
+    tbody.innerHTML = assigns.map(a=>{
+      const pub = new Date(a.publishTs).toLocaleString();
+      const up = new Date(a.unpublishTs).toLocaleString();
+      return `<tr>
+        <td>${escapeHtml(a.title)}</td>
+        <td>${pub}</td>
+        <td>${up}</td>
+        <td>${a.groupRequired? 'Yes' : 'No'}</td>
+        <td>
+          <button class="action-btn" data-id="${a.id}" data-act="edit">Edit</button>
+          <button class="action-btn" data-id="${a.id}" data-act="reopen">Reopen</button>
+          <button class="action-btn" data-id="${a.id}" data-act="delete">Delete</button>
+        </td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const id = b.dataset.id, act=b.dataset.act;
+        if(act==='edit') editAssignment(id);
+        if(act==='reopen') reopenAssignment(id);
+        if(act==='delete') deleteAssignment(id);
+      });
+    });
+    document.getElementById('statAssignments').innerText = (assigns.length || 0);
+  });
+}
+
+function editAssignment(id){
+  readAssignments(assigns=>{
+    const a = assigns.find(x=>x.id===id);
+    if(!a) return alert('Assignment not found');
+    editingAssignmentId = id;
+    document.getElementById('assignTitle').value = a.title;
+    document.getElementById('assignDesc').value = a.description || '';
+    document.getElementById('assignPublish').value = new Date(a.publishTs).toISOString().slice(0,16);
+    document.getElementById('assignUnpublish').value = new Date(a.unpublishTs).toISOString().slice(0,16);
+    document.getElementById('assignGroup').checked = !!a.groupRequired;
+    document.getElementById('assignPoints').value = a.totalPoints || 100;
+    const qList = document.getElementById('questionsList');
+    qList.innerHTML = '';
+    (a.questions || []).forEach(q=>{ qList.appendChild(newQuestionBlock(q)); });
+    showView('assignments');
+  });
+}
+
+function reopenAssignment(id){
+  readAssignments(assigns=>{
+    const a = assigns.find(x=>x.id===id);
+    if(!a) return alert('Assignment not found');
+    const newPub = prompt('Enter new publish date/time (YYYY-MM-DDThh:mm)', new Date().toISOString().slice(0,16));
+    const newUnpub = prompt('Enter new unpublish (deadline) date/time (YYYY-MM-DDThh:mm)', new Date(Date.now()+24*3600*1000).toISOString().slice(0,16));
+    if(!newPub || !newUnpub) return;
+    const pTs = new Date(newPub).getTime();
+    const uTs = new Date(newUnpub).getTime();
+    if(uTs <= pTs){ return alert('Invalid times'); }
+    a.versions = a.versions || [];
+    a.versions.push({publishTs:a.publishTs, unpublishTs:a.unpublishTs, ts:Date.now()});
+    a.publishTs = pTs; a.unpublishTs = uTs;
+    writeAssignments(assigns, ()=>{
+      addActivity(`Reopened assignment "${a.title}"`);
+      readUsers(users=>{ users.forEach(u=>{ if(u.role==='student'){ pushNotificationToUser(u.email, `Assignment "${a.title}" has been reopened until ${new Date(a.unpublishTs).toLocaleString()}`); } }); });
+      renderAssignmentsTable();
+    });
+  });
+}
+
+function deleteAssignment(id){
+  if(!confirm('Delete assignment permanently?')) return;
+  readAssignments(assigns=>{
+    const updated = (assigns||[]).filter(a=>a.id!==id);
+    writeAssignments(updated, ()=>{ addActivity('Deleted assignment'); renderAssignmentsTable(); });
+  });
+}
+
+/* ---------------------------
+  Submissions & Grading (ENHANCED)
+----------------------------*/
+function refreshSubmissionsTable(){
+  readSubmissions(subs=>{
+    readAssignments(assigns=>{
+      readUsers(users=>{
+        subs = subs || [];
+        const teacherAssignIds = (assigns||[]).filter(a=>a.createdBy === currentEmail).map(a=>a.id);
+        const subsForTeacher = subs.filter(s=> teacherAssignIds.includes(s.assignmentId) );
+        const tbody = document.getElementById('submissionsTable');
+        tbody.innerHTML = subsForTeacher.map(s=>{
+          const as = (assigns||[]).find(a=>a.id===s.assignmentId) || {title:'(deleted)', totalPoints:0};
+          const student = (users||[]).find(u=> (u.email||'').toLowerCase()===(s.studentEmail||s.student||'').toLowerCase()) || {fullName:(s.studentEmail||s.student||'')};
+          const status = s.graded ? 'Graded' : (s.locked ? 'Locked' : 'Pending');
+          const submitted = s.submittedAt ? new Date(s.submittedAt).toLocaleString() : '-';
+          const score = (s.score===null || s.score===undefined) ? '-' : `${s.score} / ${as.totalPoints||0}`;
+          return `<tr>
+            <td>${escapeHtml(student.fullName||student.email||'')}</td>
+            <td>${escapeHtml(as.title)}</td>
+            <td>${submitted}</td>
+            <td>${status}</td>
+            <td>${score}</td>
+            <td>
+              <button class="action-btn" data-id="${s.id||`${s.assignmentId}::${s.student||s.studentEmail}`}" data-act="open">Open</button>
+              <button class="action-btn" data-id="${s.id||`${s.assignmentId}::${s.student||s.studentEmail}`}" data-act="edit">Edit Copy</button>
+            </td>
+          </tr>`;
+        }).join('');
+        tbody.querySelectorAll('button').forEach(b=>{
+          b.addEventListener('click', ()=>{
+            const id = b.dataset.id, act=b.dataset.act;
+            if(act==='open') openSubmissionDetail(id);
+            if(act==='edit') openFeedbackModalFor(id);
+          });
+        });
+        document.getElementById('statPending').innerText = subsForTeacher.filter(s=>!s.graded).length;
+      });
+    });
+  });
+}
+
+document.getElementById('refreshSubmissions').addEventListener('click', refreshSubmissionsTable);
+
+/* Active submission context */
+let activeSubmission = null;
+let activeAssignment = null;
+
+function findSubmissionByKey(subs, key){
+  // key may be s.id or `${assignmentId}::${student}`
+  let s = subs.find(x=> (x.id && (x.id===key)) );
+  if(!s){
+    const [aid, student] = key.split('::');
+    s = subs.find(x=> x.assignmentId===aid && ((x.student||x.studentEmail)===student));
+  }
+  return s;
+}
+
+/* Render submission detail with per-question grading controls */
+function openSubmissionDetail(key){
+  readSubmissions(subs=>{
+    const s = findSubmissionByKey(subs, key);
+    if(!s) return alert('Submission not found');
+    activeSubmission = s;
+    readAssignments(assigns=>{
+      const as = (assigns||[]).find(a=>a.id===s.assignmentId);
+      if(!as || as.createdBy !== currentEmail) { alert('Not your assignment'); return; }
+      activeAssignment = as;
+
+      document.getElementById('noSubmission').style.display='none';
+      document.getElementById('submissionPanel').style.display='block';
+      document.getElementById('subStudent').innerText = s.studentName || s.studentEmail || s.student || '';
+      const meta = `Submitted: ${s.submittedAt ? new Date(s.submittedAt).toLocaleString() : '-'} • ${ (s.groupMembers && s.groupMembers.length>0) ? 'Group submission' : 'Individual'}`;
+      document.getElementById('subMeta').innerText = meta;
+      document.getElementById('lockToggleBtn').innerText = s.locked ? 'Unlock' : 'Lock';
+      // build assignment view with per-question grading
+      const av = document.getElementById('assignmentView');
+      av.innerHTML = `<h3 style="margin-top:0">${escapeHtml(as.title)}</h3><div class="small-muted">${escapeHtml(as.description||'')}</div><hr/>`;
+
+      const questionsContainer = document.createElement('div');
+      questionsContainer.className = 'grid-questions';
+
+      const answers = s.answers || [];
+      let totalMax = as.totalPoints || 0;
+
+      const qMaxList = (as.questions||[]).map(q=> q.points || 0 );
+      const qSum = qMaxList.reduce((a,b)=>a+b,0);
+      let normalized = false;
+      let normalizeFactor = 1;
+      if(qSum && totalMax && qSum !== totalMax){
+        normalizeFactor = totalMax / qSum;
+        normalized = true;
+      }
+
+      as.questions.forEach((q, idx)=>{
+        const studAns = answers[idx] || {text:'', files:[], links:[]};
+        const qMaxRaw = q.points || 0;
+        const qMax = normalized ? Math.round((qMaxRaw * normalizeFactor) * 100)/100 : qMaxRaw;
+
+        const qGradeState = (s.qGrades && s.qGrades[idx]) ? s.qGrades[idx] : {score:null, feedback:'', revealed: !!(s.qGrades && s.qGrades[idx] && s.qGrades[idx].revealed) };
+
+        const qBlock = document.createElement('div');
+        qBlock.className = 'question';
+        qBlock.dataset.qidx = idx;
+        qBlock.innerHTML = `
+          <div style=\"display:flex;justify-content:space-between;align-items:center\">
+            <div><strong>Q${idx+1}.</strong> ${escapeHtml(q.text || '')}</div>
+            <div class=\"small-muted\">Max: ${qMax}</div>
+          </div>
+          <div class=\"hint\">Hint: ${escapeHtml(q.hint || 'No hint')}</div>
+          <div style=\"margin-top:8px\"><strong>Student answer:</strong>
+            <div style=\"margin-top:6px\">${ studAns.text ? `<div>${escapeHtml(studAns.text)}</div>` : '<div class=\"small-muted\">No text answer</div>' }</div>
+            ${ studAns.files && studAns.files.length ? '<div style=\"margin-top:6px\" class=\"small-muted\">Files: '+escapeHtml(studAns.files.join(', '))+'</div>':'' }
+            ${ studAns.links && studAns.links.length ? '<div style=\"margin-top:6px\" class=\"small-muted\">Links: '+escapeHtml(studAns.links.join(', '))+'</div>':'' }
+          </div>
+
+          <div style=\"margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center\">
+            <label class=\"small-muted\">Score:</label>
+            <input type=\"number\" class=\"qscore input\" min=\"0\" max=\"${qMax}\" style=\"width:110px\" value=\"${qGradeState.score !== null && qGradeState.score !== undefined ? qGradeState.score : ''}\">
+            <label class=\"small-muted\">Feedback:</label>
+            <input type=\"text\" class=\"qfeedback input\" style=\"flex:1\" value=\"${escapeHtml(qGradeState.feedback || '')}\">
+            <button class=\"action-btn qRevealBtn\">${qGradeState.revealed ? 'Explanation visible' : 'Reveal explanation'}</button>
+          </div>
+          <div class=\"explanation\" id=\"exp-${idx}\">${escapeHtml(q.explanation || '')}</div>
+        `;
+
+        const revealBtn = qBlock.querySelector('.qRevealBtn');
+        const expDiv = qBlock.querySelector('.explanation');
+        if(qGradeState.revealed){ expDiv.style.display = 'block'; } else { expDiv.style.display = 'none'; }
+        revealBtn.addEventListener('click', ()=>{
+          const scoreVal = qBlock.querySelector('.qscore').value;
+          const allow = (scoreVal !== '' && scoreVal !== null) || confirm('Reveal explanation even if ungraded?');
+          if(!allow) return;
+          expDiv.style.display = 'block';
+          revealBtn.innerText = 'Explanation visible';
+        });
+
+        questionsContainer.appendChild(qBlock);
+      });
+
+      av.appendChild(questionsContainer);
+
+      renderGradeSummaryForSubmission(s, as);
+    });
+  });
+}
+
+/* Toggle lock for submission */
+document.getElementById('lockToggleBtn').addEventListener('click', ()=>{
+  if(!activeSubmission) return;
+  readSubmissions(subs=>{
+    const s = findSubmissionByKey(subs, activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`);
+    if(!s) return alert('Not found');
+    s.locked = !s.locked;
+    s.lockedBy = s.locked ? currentEmail : null;
+    writeSubmissions(subs, ()=>{ addActivity(`${s.locked ? 'Locked' : 'Unlocked'} grade for ${s.studentEmail||s.student}`); refreshSubmissionsTable(); openSubmissionDetail(s.id || `${s.assignmentId}::${s.student||s.studentEmail}`); });
+  });
+});
+
+/* Save grading */
+document.getElementById('saveGradeBtn').addEventListener('click', ()=>{
+  if(!activeSubmission || !activeAssignment) return alert('No submission selected');
+  readSubmissions(subs=>{
+    const key = activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`;
+    const sIndex = subs.findIndex(x=> (x.id && x.id===key) || (!x.id && `${x.assignmentId}::${x.student||x.studentEmail}`===key));
+    if(sIndex === -1) return alert('Submission not found');
+    const s = subs[sIndex];
+
+    const qBlocks = document.querySelectorAll('#assignmentView .question');
+    s.qGrades = s.qGrades || [];
+    let sum = 0; let maxSum = 0;
+    const as = activeAssignment;
+    const qMaxList = (as.questions||[]).map(q=> q.points || 0 );
+    const qSum = qMaxList.reduce((a,b)=>a+b,0);
+    const normalized = (qSum && as.totalPoints && qSum !== as.totalPoints);
+    const factor = normalized ? (as.totalPoints / qSum) : 1;
+
+    qBlocks.forEach((qb, idx)=>{
+      const scoreInput = qb.querySelector('.qscore');
+      const feedbackInput = qb.querySelector('.qfeedback');
+      const qMax = (as.questions[idx] && (as.questions[idx].points || 0)) * factor;
+      const rawScore = scoreInput.value === '' ? null : Number(scoreInput.value);
+      const bounded = rawScore === null ? null : Math.max(0, Math.min(Number((Math.round(rawScore*100)/100).toFixed(2)), Number((Math.round(qMax*100)/100).toFixed(2))));
+      s.qGrades[idx] = s.qGrades[idx] || {};
+      s.qGrades[idx].score = bounded;
+      s.qGrades[idx].feedback = feedbackInput.value || '';
+      s.qGrades[idx].revealed = (qb.querySelector('.explanation').style.display === 'block') || !!s.qGrades[idx].revealed;
+      if(bounded !== null){ sum += bounded; }
+      maxSum += qMax;
+    });
+
+    const rawTotal = Math.round(sum * 100)/100;
+    let finalTotal = rawTotal;
+    const penaltyPercent = Number(document.getElementById('latePenaltyInput').value) || 0;
+    const isLate = s.submittedAt > as.unpublishTs;
+    if(isLate && penaltyPercent > 0){
+      const deduction = Math.round((penaltyPercent/100) * finalTotal * 100)/100;
+      finalTotal = Math.max(0, Math.round((finalTotal - deduction)*100)/100);
+    }
+
+    s.score = finalTotal;
+    s.maxScore = Math.round(maxSum*100)/100;
+    s.graded = true;
+    s.locked = true;
+    s.gradeDate = Date.now();
+    s.history = s.history || [];
+    s.history.push({ ts: Date.now(), grader: currentEmail, rawTotal, finalTotal, penaltyPercent: isLate? penaltyPercent : 0, perQuestion: s.qGrades.map((qg, i)=>({index:i, score:qg.score, feedback:qg.feedback, revealed: !!qg.revealed})) });
+
+    subs[sIndex] = s;
+    writeSubmissions(subs, ()=>{
+      const asTitle = as.title;
+      if(s.groupMembers && s.groupMembers.length){ s.groupMembers.forEach(email=> pushNotificationToUser(email, `Your group submission "${asTitle}" was graded: ${s.score}/${s.maxScore}`)); }
+      else { pushNotificationToUser(s.studentEmail||s.student, `Your submission "${asTitle}" was graded: ${s.score}/${s.maxScore}`); }
+      addActivity(`Graded submission ${s.id||''} (${s.studentEmail||s.student}) for "${asTitle}" — ${s.score}/${s.maxScore}`);
+      refreshSubmissionsTable();
+      openSubmissionDetail(s.id || `${s.assignmentId}::${s.student||s.studentEmail}`);
+      renderGradeSummaryForSubmission(s, as);
+      alert('Grade saved and student notified.');
+    });
+  });
+});
+
+/* Regrade (unlock) */
+document.getElementById('regradeBtn').addEventListener('click', ()=>{
+  if(!activeSubmission) return;
+  readSubmissions(subs=>{
+    const key = activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`;
+    const s = findSubmissionByKey(subs, key);
+    if(!s) return;
+    s.graded = false;
+    s.locked = false;
+    writeSubmissions(subs, ()=>{ addActivity('Unlocked submission for regrade'); refreshSubmissionsTable(); openSubmissionDetail(key); });
+  });
+});
+
+/* Reveal all explanations */
+document.getElementById('releaseAllExplanationsBtn').addEventListener('click', ()=>{
+  if(!activeSubmission) return;
+  if(!confirm('Reveal explanations for all questions now? This will make them visible to the student after saving.')) return;
+  document.querySelectorAll('#assignmentView .question').forEach((qb)=>{
+    qb.querySelector('.explanation').style.display = 'block';
+    qb.querySelector('.qRevealBtn').innerText = 'Explanation visible';
+  });
+  alert('Explanations visible in the UI. Press "Save Grade & Notify" to persist this state.');
+});
+
+/* Render grade summary and history */
+function renderGradeSummaryForSubmission(s, as){
+  const summary = document.getElementById('gradeSummary');
+  if(!s) { summary.innerHTML = ''; return; }
+  const isLate = s.submittedAt > as.unpublishTs;
+  summary.innerHTML = `<div class="small-muted">Total: <strong>${s.score !== undefined ? s.score : '-'}/${s.maxScore || as.totalPoints}</strong></div>
+    <div class="small-muted">${isLate ? 'Submission was LATE (late penalty applied if configured).' : 'On time'}</div>`;
+
+  const hist = document.getElementById('gradeHistory');
+  hist.innerHTML = '';
+  if(s.history && s.history.length){
+    hist.innerHTML = '<div class="small-muted">Grade history</div>';
+    const rows = s.history.slice().reverse().map(h=>{
+      return `<div class="recent-item">
+        ${new Date(h.ts).toLocaleString()} — Grader: ${escapeHtml(h.grader)} • Raw: ${h.rawTotal} • Final: ${h.finalTotal} ${h.penaltyPercent ? '• Penalty: '+h.penaltyPercent+'%':''}
+        <div style="margin-top:6px;font-size:13px">Q details: ${h.perQuestion.map(p=>`[Q${p.index+1}: ${p.score===null?'-':p.score}]`).join(' ')}</div>
+      </div>`;
+    }).join('');
+    hist.innerHTML += rows;
+  }
+}
+
+/* Feedback only */
+document.getElementById('sendFeedbackOnlyBtn').addEventListener('click', ()=>{
+  if(!activeSubmission) return;
+  const explanation = document.getElementById('explainInput').value || '';
+  readSubmissions(subs=>{
+    const key = activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`;
+    const s = findSubmissionByKey(subs, key);
+    if(!s) return;
+    s.teacherFeedbackOnly = explanation;
+    writeSubmissions(subs, ()=>{
+      pushNotificationToUser(s.studentEmail||s.student, `Feedback from teacher on "${activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment')}"`);
+      addActivity(`Sent feedback to ${s.studentEmail||s.student}`);
+      refreshSubmissionsTable();
+    });
+  });
+});
+
+/* ---------------------------
+  Feedback copy editor
+----------------------------*/
+const modal = document.getElementById('modalBackdrop');
+function openFeedbackModalFor(key){
+  readSubmissions(subs=>{
+    const s = findSubmissionByKey(subs, key);
+    if(!s) return alert('Submission not found');
+    const editor = document.getElementById('feedbackEditor');
+    editor.innerHTML = '';
+    readAssignments(assigns=>{
+      const as = (assigns||[]).find(a=>a.id===s.assignmentId) || {title:(s.assignmentTitle||'Assignment')};
+      document.getElementById('feedbackFor').innerText = `Student: ${s.studentName || s.studentEmail || s.student} • Assignment: ${as.title}`;
+      (as.questions||[]).forEach((q, idx)=>{
+        const ans = (s.answers && s.answers[idx]) ? s.answers[idx].text : '';
+        const block = document.createElement('div');
+        block.style.marginBottom='10px';
+        block.innerHTML = `<div style="font-weight:600">Q${idx+1}: ${escapeHtml(q.text)}</div>
+          <div class="small-muted">Hint: ${escapeHtml(q.hint||'')}</div>
+          <label class="label">Teacher edited copy (visible to student)</label>
+          <textarea class="feedbackText input" rows="4">${escapeHtml(ans||'')}</textarea>`;
+        editor.appendChild(block);
+      });
+      modal.style.display='flex';
+    });
+    modal.dataset.subid = s.id || `${s.assignmentId}::${s.student||s.studentEmail}`;
+  });
+}
+document.getElementById('editFeedbackBtn').addEventListener('click', ()=>{ if(activeSubmission){ openFeedbackModalFor(activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`); }});
+document.getElementById('closeModal').addEventListener('click', ()=>{ modal.style.display='none'; });
+document.getElementById('saveFeedbackCopy').addEventListener('click', ()=>{
+  const key = modal.dataset.subid;
+  if(!key) return;
+  const texts = Array.from(document.querySelectorAll('.feedbackText')).map(t=>t.value);
+  readFeedbacks(fb=>{
+    if(!fb) fb=[];
+    const id = 'fb_'+Date.now();
+    const copy = { id, submissionKey: key, teacher: currentEmail, ts: Date.now(), texts };
+    fb.push(copy);
+    writeFeedbacks(fb, ()=>{
+      readSubmissions(subs=>{
+        const s = findSubmissionByKey(subs, key);
+        if(s){
+          s.feedbackCopyId = id;
+          writeSubmissions(subs, ()=>{
+            pushNotificationToUser(s.studentEmail||s.student, `Teacher sent feedback on "${activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment')}"`);
+            addActivity(`Saved feedback copy for ${s.studentEmail||s.student}`);
+            modal.style.display='none';
+            refreshSubmissionsTable();
+          });
+        } else {
+          modal.style.display='none';
+        }
+      });
+    });
+  });
+});
+
+/* ---------------------------
+  Overview & analytics
+----------------------------*/
+function renderOverview(){
+  readAssignments(assigns=>{
+    const myAssigns = (assigns||[]).filter(a=>a.createdBy===currentEmail);
+    document.getElementById('statAssignments').innerText = myAssigns.length;
+    const ov = document.getElementById('overviewRecent');
+    const top = myAssigns.slice().sort((a,b)=> (b.publishTs||0)-(a.publishTs||0)).slice(0,5);
+    ov.innerHTML = top.length ? top.map(a=>`<div class="recent-item"><span class="badge">${new Date(a.publishTs).toLocaleDateString()}</span> ${escapeHtml(a.title)}</div>`).join('') : '<div class="small-muted">No assignments yet</div>';
+  });
+  readUsers(users=>{
+    const me = users.find(u=> (u.email||'').toLowerCase()===currentEmail);
+    const nots = me && me.notifications ? me.notifications.slice().reverse().slice(0,6) : [];
+    document.getElementById('overviewNotifs').innerHTML = nots.map(n=>`<div class="recent-item">${escapeHtml(n.message)}</div>`).join('') || '<div class="small-muted">No notifications</div>';
+  });
+}
+
+/* ---------------------------
+  Helpers & boot
+----------------------------*/
+function escapeHtml(s){
+  if(s === null || s === undefined) return '';
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+}
+
+function loadInitialDataIfEmpty(cb){
+  readUsers(users=>{
+    if(!users || users.length===0){
+      const demo = { fullName:'Demo Teacher', email: currentEmail || 'teacher@example.com', role:'teacher', password:'demo',active:true, notifications:[] };
+      users = [demo];
+      writeUsers(users, ()=>{ if(cb) cb(); });
+    } else {
+      if(cb) cb();
+    }
+  });
+}
+
+/* ---------------------------
+  Init sequence
+----------------------------*/
+(async function init(){
+  await openDB();
+  await migrateLocalStorageToIDBIfNeeded();
+  await requireTeacher(async ()=>{
+    loadInitialDataIfEmpty(()=>{
+      renderAssignmentsTable(); refreshSubmissionsTable(); renderRecentActivities(); renderOverview(); refreshNotifUI();
+      document.getElementById('btnNewAssignment').addEventListener('click', ()=> document.getElementById('createAssignmentBtn').click());
+      document.getElementById('btnOpenGrading').addEventListener('click', ()=> { navLinks.forEach(x=> x.classList.remove('active')); document.querySelector('[data-view="grading"]').classList.add('active'); showView('grading'); });
+      document.getElementById('saveProfileBtn').addEventListener('click', ()=>{ const newName = document.getElementById('teacherNameInput').value.trim(); readUsers(users=>{ const u = users.find(x=> (x.email||'').toLowerCase()===currentEmail); if(u){ u.fullName = newName; writeUsers(users, ()=>{ addActivity('Updated profile'); document.getElementById('teacherName').innerText = newName; alert('Saved'); }); } }); });
+      document.getElementById('logoutBtn').addEventListener('click', async ()=> { await clearCurrentUser(); window.location.href='index.html'; });
+      document.getElementById('addQuestionBtn').click();
+      showView('overview');
+    });
+  });
+})();
+</script>
+</body>
+</html>
