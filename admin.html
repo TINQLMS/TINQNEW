@@ -82,6 +82,11 @@ label.inline{display:inline-flex;gap:6px;align-items:center;margin-right:12px}
   header .menu{display:inline-flex}
 }
 header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius:8px;padding:8px 10px;cursor:pointer}
+@media (max-width: 480px){
+  main{padding:14px}
+  .toolbar{gap:6px}
+  .tab-nav button{padding:8px 12px}
+}
 </style>
 </head>
 <body>
@@ -189,7 +194,7 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
 // ===== Storage (IndexedDB with fallback) =====
 const supportsIndexedDB = typeof indexedDB !== 'undefined';
 const DB_NAME = 'smartlms-auth';
-const DB_VERSION = 1; // keep in sync with index.html
+const DB_VERSION = 2; // v2 adds per-tab sessions, keep in sync with index.html
 let dbInstance = null;
 
 function normalizeEmail(email){ return (email||'').trim().toLowerCase(); }
@@ -206,6 +211,9 @@ function openDB(){
       }
       if(!db.objectStoreNames.contains('meta')){
         db.createObjectStore('meta',{keyPath:'key'});
+      }
+      if(!db.objectStoreNames.contains('sessions')){
+        db.createObjectStore('sessions',{keyPath:'id'});
       }
       if(!db.objectStoreNames.contains('assignments')){
         db.createObjectStore('assignments',{keyPath:'id'});
@@ -274,33 +282,40 @@ async function migrateLocalStorageToIDBIfNeeded(){
   }catch(e){ console.warn('migration failed', e); }
 }
 
-// Session helpers share the same protocol as index.html
+// Per-tab session helpers
+function getSessionId(){
+  let sid = sessionStorage.getItem('sessionId');
+  if(!sid){ sid = 's_'+Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem('sessionId', sid); }
+  return sid;
+}
 async function getCurrentUser(){
+  const sid = getSessionId();
   if(supportsIndexedDB){
     try{
       const db = await openDB();
       if(db){
         return await new Promise((resolve)=>{
-          const tx = db.transaction('meta','readonly');
-          const st = tx.objectStore('meta');
-          const r = st.get('currentUser');
-          r.onsuccess = ()=> resolve(r.result? r.result.value : null);
+          const tx = db.transaction('sessions','readonly');
+          const st = tx.objectStore('sessions');
+          const r = st.get(sid);
+          r.onsuccess = ()=> resolve(r.result? r.result.user : null);
           r.onerror = ()=> resolve(null);
         });
       }
     }catch(_){ }
   }
-  const raw = localStorage.getItem('currentUser');
+  const raw = sessionStorage.getItem('currentUser');
   return raw? JSON.parse(raw) : null;
 }
 async function setCurrentUser(user){
+  const sid = getSessionId();
   if(supportsIndexedDB){
     try{
       const db = await openDB();
       if(db){
         await new Promise((resolve)=>{
-          const tx = db.transaction('meta','readwrite');
-          tx.objectStore('meta').put({key:'currentUser', value:user});
+          const tx = db.transaction('sessions','readwrite');
+          tx.objectStore('sessions').put({id:sid, user});
           tx.oncomplete = ()=> resolve();
           tx.onerror = ()=> resolve();
         });
@@ -308,16 +323,17 @@ async function setCurrentUser(user){
       }
     }catch(_){ }
   }
-  localStorage.setItem('currentUser', JSON.stringify(user));
+  sessionStorage.setItem('currentUser', JSON.stringify(user));
 }
 async function clearCurrentUser(){
+  const sid = getSessionId();
   if(supportsIndexedDB){
     try{
       const db = await openDB();
       if(db){
         await new Promise((resolve)=>{
-          const tx = db.transaction('meta','readwrite');
-          tx.objectStore('meta').delete('currentUser');
+          const tx = db.transaction('sessions','readwrite');
+          tx.objectStore('sessions').delete(sid);
           tx.oncomplete = ()=> resolve();
           tx.onerror = ()=> resolve();
         });
@@ -325,7 +341,7 @@ async function clearCurrentUser(){
       }
     }catch(_){ }
   }
-  localStorage.removeItem('currentUser');
+  sessionStorage.removeItem('currentUser');
 }
 
 // Convenience wrappers for users/assignments/submissions
@@ -792,6 +808,15 @@ async function renderAnalytics(){
 
 // ===== Session & Access Control =====
 async function requireAdmin(){
+  // Legacy migration: if old localStorage currentUser exists, move it into this session once
+  try{
+    const legacy = localStorage.getItem('currentUser');
+    if(legacy){
+      const parsed = JSON.parse(legacy);
+      await setCurrentUser(parsed);
+      localStorage.removeItem('currentUser');
+    }
+  }catch(_){ }
   const user = await getCurrentUser();
   if(!user || user.role!=='admin'){
     alert('Access denied');
