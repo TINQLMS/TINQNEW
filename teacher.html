@@ -317,6 +317,8 @@ function openDB() {
   });
 }
 
+function normalizeEmail(email){ return (email||'').trim().toLowerCase(); }
+
 async function idbGetAll(store) {
   const db = await openDB();
   if (!db) return JSON.parse(localStorage.getItem(store)) || [];
@@ -457,7 +459,7 @@ function showView(view){
 ----------------------------*/
 function pushNotificationToUser(email, message){
   readUsers(users=>{
-    const u = users.find(x=> (x.email||'').toLowerCase() === (email||'').toLowerCase());
+    const u = users.find(x=> normalizeEmail(x.email) === normalizeEmail(email));
     if(!u) return;
     u.notifications = u.notifications || [];
     u.notifications.push({id:Date.now()+Math.random(), message, timestamp:Date.now(), read:false});
@@ -619,7 +621,7 @@ document.getElementById('createAssignmentBtn').addEventListener('click', ()=>{
 
 function renderAssignmentsTable(){
   readAssignments(assigns=>{
-    assigns = (assigns||[]).filter(a=> a.createdBy === currentEmail);
+    assigns = (assigns||[]).filter(a=> normalizeEmail(a.createdBy) === currentEmail);
     const tbody = document.getElementById('assignmentsTable');
     tbody.innerHTML = assigns.map(a=>{
       const pub = new Date(a.publishTs).toLocaleString();
@@ -703,12 +705,12 @@ function refreshSubmissionsTable(){
     readAssignments(assigns=>{
       readUsers(users=>{
         subs = subs || [];
-        const teacherAssignIds = (assigns||[]).filter(a=>a.createdBy === currentEmail).map(a=>a.id);
+        const teacherAssignIds = (assigns||[]).filter(a=> normalizeEmail(a.createdBy) === currentEmail).map(a=>a.id);
         const subsForTeacher = subs.filter(s=> teacherAssignIds.includes(s.assignmentId) );
         const tbody = document.getElementById('submissionsTable');
         tbody.innerHTML = subsForTeacher.map(s=>{
           const as = (assigns||[]).find(a=>a.id===s.assignmentId) || {title:'(deleted)', totalPoints:0};
-          const student = (users||[]).find(u=> (u.email||'').toLowerCase()===(s.studentEmail||s.student||'').toLowerCase()) || {fullName:(s.studentEmail||s.student||'')};
+          const student = (users||[]).find(u=> normalizeEmail(u.email)===normalizeEmail(s.studentEmail||s.student||'')) || {fullName:(s.studentEmail||s.student||'')};
           const status = s.graded ? 'Graded' : (s.locked ? 'Locked' : 'Pending');
           const submitted = s.submittedAt ? new Date(s.submittedAt).toLocaleString() : '-';
           const score = (s.score===null || s.score===undefined) ? '-' : `${s.score} / ${as.totalPoints||0}`;
@@ -748,9 +750,49 @@ function findSubmissionByKey(subs, key){
   let s = subs.find(x=> (x.id && (x.id===key)) );
   if(!s){
     const [aid, student] = key.split('::');
-    s = subs.find(x=> x.assignmentId===aid && ((x.student||x.studentEmail)===student));
+    s = subs.find(x=> x.assignmentId===aid && (normalizeEmail(x.student||x.studentEmail)===normalizeEmail(student)));
   }
   return s;
+}
+
+// ---- Group submission helpers ----
+function deriveGroupId(assignmentId, members){
+  const arr = (members||[]).map(normalizeEmail).filter(Boolean).sort();
+  return `g_${assignmentId}::${arr.join('|')}`;
+}
+function ensureSubmissionHasGroupId(sub){
+  if(sub && sub.groupMembers && sub.groupMembers.length){
+    const all = Array.from(new Set([...(sub.groupMembers||[]).map(normalizeEmail), normalizeEmail(sub.student||sub.studentEmail)]));
+    sub.groupMembers = all;
+    sub.groupId = sub.groupId || deriveGroupId(sub.assignmentId, all);
+  }
+}
+function ensureGroupReplication(subs, sub){
+  if(!sub || !sub.groupMembers || !sub.groupMembers.length) return {subs, changed:false};
+  ensureSubmissionHasGroupId(sub);
+  const groupId = sub.groupId;
+  let changed = false;
+  const members = sub.groupMembers.map(normalizeEmail);
+  members.forEach(m => {
+    const exists = subs.find(x => x.assignmentId===sub.assignmentId && normalizeEmail(x.student||x.studentEmail)===m);
+    if(!exists){
+      const clone = { ...sub };
+      delete clone.id; // composite key used
+      clone.student = m;
+      clone.studentEmail = m;
+      // keep same answers and metadata
+      subs.push(clone);
+      changed = true;
+    }
+  });
+  // Normalize groupId on all related records
+  subs.forEach(x=>{
+    if(x.assignmentId===sub.assignmentId){
+      if(x.groupMembers && x.groupMembers.length){ ensureSubmissionHasGroupId(x); }
+      if(x.groupId===groupId){ x.groupMembers = Array.from(new Set((x.groupMembers||[]).map(normalizeEmail))); }
+    }
+  });
+  return {subs, changed};
 }
 
 /* Render submission detail with per-question grading controls */
@@ -758,6 +800,11 @@ function openSubmissionDetail(key){
   readSubmissions(subs=>{
     const s = findSubmissionByKey(subs, key);
     if(!s) return alert('Submission not found');
+    // Replicate group submissions so each member has a record
+    const result = ensureGroupReplication(subs, s);
+    if(result.changed){
+      writeSubmissions(result.subs, ()=>{ refreshSubmissionsTable(); });
+    }
     activeSubmission = s;
     readAssignments(assigns=>{
       const as = (assigns||[]).find(a=>a.id===s.assignmentId);
@@ -863,6 +910,16 @@ document.getElementById('saveGradeBtn').addEventListener('click', ()=>{
     if(sIndex === -1) return alert('Submission not found');
     const s = subs[sIndex];
 
+    // Enforce group list requirement for group assignments
+    if(activeAssignment.groupRequired){
+      const members = (s.groupMembers||[]).map(normalizeEmail).filter(Boolean);
+      const hasList = members.length >= 2; // require at least 2 members for a group
+      if(!hasList){
+        alert('This is a group assignment. The submission must include a group list (at least 2 members). Ask the student to resubmit with their group.');
+        return;
+      }
+    }
+
     const qBlocks = document.querySelectorAll('#assignmentView .question');
     s.qGrades = s.qGrades || [];
     let sum = 0; let maxSum = 0;
@@ -903,8 +960,21 @@ document.getElementById('saveGradeBtn').addEventListener('click', ()=>{
     s.history = s.history || [];
     s.history.push({ ts: Date.now(), grader: currentEmail, rawTotal, finalTotal, penaltyPercent: isLate? penaltyPercent : 0, perQuestion: s.qGrades.map((qg, i)=>({index:i, score:qg.score, feedback:qg.feedback, revealed: !!qg.revealed})) });
 
+    // Persist to all group members if applicable
     subs[sIndex] = s;
-    writeSubmissions(subs, ()=>{
+    const toWrite = (()=>{
+      const result = ensureGroupReplication(subs, s);
+      if(s.groupId){
+        result.subs = result.subs.map(rec=>{
+          if(rec.assignmentId===s.assignmentId && rec.groupId===s.groupId){
+            return { ...rec, qGrades: s.qGrades, score: s.score, maxScore: s.maxScore, graded: s.graded, locked: s.locked, gradeDate: s.gradeDate };
+          }
+          return rec;
+        });
+      }
+      return result.subs;
+    })();
+    writeSubmissions(toWrite, ()=>{
       const asTitle = as.title;
       if(s.groupMembers && s.groupMembers.length){ s.groupMembers.forEach(email=> pushNotificationToUser(email, `Your group submission "${asTitle}" was graded: ${s.score}/${s.maxScore}`)); }
       else { pushNotificationToUser(s.studentEmail||s.student, `Your submission "${asTitle}" was graded: ${s.score}/${s.maxScore}`); }
@@ -926,7 +996,12 @@ document.getElementById('regradeBtn').addEventListener('click', ()=>{
     if(!s) return;
     s.graded = false;
     s.locked = false;
-    writeSubmissions(subs, ()=>{ addActivity('Unlocked submission for regrade'); refreshSubmissionsTable(); openSubmissionDetail(key); });
+    // propagate unlock to group
+    const toWrite = (s.groupId) ? subs.map(rec=>{
+      if(rec.assignmentId===s.assignmentId && rec.groupId===s.groupId){ return { ...rec, graded:false, locked:false }; }
+      return rec;
+    }) : subs;
+    writeSubmissions(toWrite, ()=>{ addActivity('Unlocked submission for regrade'); refreshSubmissionsTable(); openSubmissionDetail(key); });
   });
 });
 
@@ -971,9 +1046,14 @@ document.getElementById('sendFeedbackOnlyBtn').addEventListener('click', ()=>{
     const key = activeSubmission.id || `${activeSubmission.assignmentId}::${activeSubmission.student||activeSubmission.studentEmail}`;
     const s = findSubmissionByKey(subs, key);
     if(!s) return;
-    s.teacherFeedbackOnly = explanation;
-    writeSubmissions(subs, ()=>{
-      pushNotificationToUser(s.studentEmail||s.student, `Feedback from teacher on "${activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment')}"`);
+    const title = activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment');
+    const toWrite = (s.groupId) ? subs.map(rec=>{
+      if(rec.assignmentId===s.assignmentId && rec.groupId===s.groupId){ return { ...rec, teacherFeedbackOnly: explanation }; }
+      return rec;
+    }) : subs.map(rec=> rec===s ? { ...rec, teacherFeedbackOnly: explanation } : rec);
+    writeSubmissions(toWrite, ()=>{
+      if(s.groupMembers && s.groupMembers.length){ s.groupMembers.forEach(email=> pushNotificationToUser(email, `Feedback from teacher on "${title}"`)); }
+      else { pushNotificationToUser(s.studentEmail||s.student, `Feedback from teacher on "${title}"`); }
       addActivity(`Sent feedback to ${s.studentEmail||s.student}`);
       refreshSubmissionsTable();
     });
@@ -1023,9 +1103,14 @@ document.getElementById('saveFeedbackCopy').addEventListener('click', ()=>{
       readSubmissions(subs=>{
         const s = findSubmissionByKey(subs, key);
         if(s){
-          s.feedbackCopyId = id;
-          writeSubmissions(subs, ()=>{
-            pushNotificationToUser(s.studentEmail||s.student, `Teacher sent feedback on "${activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment')}"`);
+          const title = activeAssignment ? activeAssignment.title : (s.assignmentTitle||'assignment');
+          const toWrite = (s.groupId) ? subs.map(rec=>{
+            if(rec.assignmentId===s.assignmentId && rec.groupId===s.groupId){ return { ...rec, feedbackCopyId: id }; }
+            return rec;
+          }) : subs.map(rec=> rec===s ? { ...rec, feedbackCopyId: id } : rec);
+          writeSubmissions(toWrite, ()=>{
+            if(s.groupMembers && s.groupMembers.length){ s.groupMembers.forEach(email=> pushNotificationToUser(email, `Teacher sent feedback on "${title}"`)); }
+            else { pushNotificationToUser(s.studentEmail||s.student, `Teacher sent feedback on "${title}"`); }
             addActivity(`Saved feedback copy for ${s.studentEmail||s.student}`);
             modal.style.display='none';
             refreshSubmissionsTable();
@@ -1065,15 +1150,8 @@ function escapeHtml(s){
 }
 
 function loadInitialDataIfEmpty(cb){
-  readUsers(users=>{
-    if(!users || users.length===0){
-      const demo = { fullName:'Demo Teacher', email: currentEmail || 'teacher@example.com', role:'teacher', password:'demo',active:true, notifications:[] };
-      users = [demo];
-      writeUsers(users, ()=>{ if(cb) cb(); });
-    } else {
-      if(cb) cb();
-    }
-  });
+  // No demo data; rely on actual login/signup data only
+  if(cb) cb();
 }
 
 /* ---------------------------
@@ -1089,7 +1167,7 @@ function loadInitialDataIfEmpty(cb){
       document.getElementById('btnOpenGrading').addEventListener('click', ()=> { navLinks.forEach(x=> x.classList.remove('active')); document.querySelector('[data-view="grading"]').classList.add('active'); showView('grading'); });
       document.getElementById('saveProfileBtn').addEventListener('click', ()=>{ const newName = document.getElementById('teacherNameInput').value.trim(); readUsers(users=>{ const u = users.find(x=> (x.email||'').toLowerCase()===currentEmail); if(u){ u.fullName = newName; writeUsers(users, ()=>{ addActivity('Updated profile'); document.getElementById('teacherName').innerText = newName; alert('Saved'); }); } }); });
       document.getElementById('logoutBtn').addEventListener('click', async ()=> { await clearCurrentUser(); window.location.href='index.html'; });
-      document.getElementById('addQuestionBtn').click();
+      // Do not auto-insert demo questions
       showView('overview');
     });
   });
