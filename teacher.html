@@ -553,6 +553,7 @@ function newQuestionBlock(q){
       </select>
       <input class="qpoints input" placeholder="Points" style="width:120px" value="${q?.points||10}" />
     </div>
+    <div class="qsettings" style="margin-top:8px"></div>
     <div style="margin-top:6px">
       <label class="label">Hint (visible with question)</label>
       <textarea class="qhint input" rows="2" placeholder="Hint">${q?.hint||''}</textarea>
@@ -562,6 +563,55 @@ function newQuestionBlock(q){
   `;
   container.querySelector('.removeQuestion').addEventListener('click', ()=>{ container.remove(); });
   if(q?.type) container.querySelector('.qtype').value = q.type;
+  function renderSettings(){
+    const type = container.querySelector('.qtype').value;
+    const wrap = container.querySelector('.qsettings');
+    if(type === 'essay'){
+      wrap.innerHTML = `
+        <div class="small-muted">Essay response: unlimited text allowed.</div>
+      `;
+    } else if(type === 'file'){
+      const meta = q?.meta || {};
+      const allowMultiple = meta.allowMultiple ? 'checked' : '';
+      const maxMB = meta.maxSizeMB != null ? meta.maxSizeMB : 100;
+      const ext = Array.isArray(meta.allowedExtensions) ? meta.allowedExtensions : ['pdf','doc','docx','ppt','pptx','xls','xlsx','jpg','jpeg','png','gif','mp4','mov','avi','mp3','wav'];
+      wrap.innerHTML = `
+        <div class="small-muted">File upload: students can drag & drop files. Choose allowed types and limits.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+          <label class="small-muted">Max size (MB): <input type="number" class="q-file-maxmb input" value="${maxMB}" style="width:90px"></label>
+          <label class="small-muted"><input type="checkbox" class="q-file-multi" ${allowMultiple}> Allow multiple files</label>
+        </div>
+        <div style="margin-top:6px">
+          <label class="label">Allowed extensions (comma-separated)</label>
+          <input class="q-file-ext input" placeholder="e.g. pdf, docx, pptx, mp4, mp3, jpg" value="${ext.join(', ')}">
+        </div>
+      `;
+    } else if(type === 'link'){
+      const meta = q?.meta || {};
+      const url = meta.resourceUrl || '';
+      wrap.innerHTML = `
+        <div class="small-muted">Attach an external URL (e.g., Google Form, Microsoft Form, any link). Students will see this link in the question.</div>
+        <input class="q-link-url input" placeholder="https://..." value="${url}">
+        <div class="small-muted" style="margin-top:6px">Preview:</div>
+        <div class="q-link-preview" style="margin-top:6px"></div>
+      `;
+      const urlInput = wrap.querySelector('.q-link-url');
+      const preview = wrap.querySelector('.q-link-preview');
+      function updatePreview(){
+        const v = (urlInput.value||'').trim();
+        if(!v){ preview.innerHTML=''; return; }
+        const safe = v.replace(/"/g,'');
+        const isEmb = /(docs.google.com|forms\.gle|form\.office\.com)/.test(safe);
+        preview.innerHTML = `<a href="${safe}" target="_blank" rel="noopener">Open link in new tab</a>` + (isEmb ? `<div style="margin-top:6px"><iframe src="${safe}" style="width:100%;height:320px;border:1px solid #e6e9ee;border-radius:6px" sandbox="allow-forms allow-scripts allow-same-origin allow-popups"></iframe></div>` : '');
+      }
+      urlInput.addEventListener('input', updatePreview);
+      updatePreview();
+    } else {
+      wrap.innerHTML = '';
+    }
+  }
+  renderSettings();
+  container.querySelector('.qtype').addEventListener('change', renderSettings);
   return container;
 }
 
@@ -589,6 +639,24 @@ document.getElementById('saveAssignmentBtn').addEventListener('click', ()=>{
       text: qn.querySelector('.qtext').value,
       type: qn.querySelector('.qtype').value,
       points: Number(qn.querySelector('.qpoints').value) || 0,
+      meta: (()=>{
+        const type = qn.querySelector('.qtype').value;
+        if(type==='file'){
+          const max = Number(qn.querySelector('.q-file-maxmb')?.value || 100) || 100;
+          const multi = !!qn.querySelector('.q-file-multi')?.checked;
+          const ext = (qn.querySelector('.q-file-ext')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+          return { maxSizeMB: max, allowMultiple: multi, allowedExtensions: ext };
+        }
+        if(type==='link'){
+          const url = (qn.querySelector('.q-link-url')?.value || '').trim();
+          return { resourceUrl: url };
+        }
+        if(type==='essay'){
+          // currently unlimited; reserved for future optional max
+          return { maxChars: null };
+        }
+        return {};
+      })(),
       hint: qn.querySelector('.qhint').value,
       explanation: qn.querySelector('.qexp').value
     };
