@@ -554,6 +554,15 @@ function newQuestionBlock(q){
       <input class="qpoints input" placeholder="Points" style="width:120px" value="${q?.points||10}" />
     </div>
     <div class="qsettings" style="margin-top:8px"></div>
+    <div class="q-attach" style="margin-top:8px">
+      <div class="small-muted">Teacher attachments (visible to students)</div>
+      <div class="q-drop" style="border:1px dashed #e6e9ee;padding:10px;border-radius:6px;background:#fcfcfc;margin-top:6px;text-align:center;cursor:pointer">
+        Drag & drop files here or click to choose
+        <input type="file" class="q-attach-input" multiple style="display:none" />
+      </div>
+      <div class="q-attach-list" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      <input type="hidden" class="q-attach-data" />
+    </div>
     <div style="margin-top:6px">
       <label class="label">Hint (visible with question)</label>
       <textarea class="qhint input" rows="2" placeholder="Hint">${q?.hint||''}</textarea>
@@ -612,6 +621,66 @@ function newQuestionBlock(q){
   }
   renderSettings();
   container.querySelector('.qtype').addEventListener('change', renderSettings);
+  // --- Attachments management ---
+  const attachDataInput = container.querySelector('.q-attach-data');
+  const attachList = container.querySelector('.q-attach-list');
+  const drop = container.querySelector('.q-drop');
+  const fileInput = container.querySelector('.q-attach-input');
+  let attachments = Array.isArray(q?.meta?.attachments)? q.meta.attachments.slice() : [];
+
+  function setAttachments(arr){
+    attachments = arr;
+    attachDataInput.value = JSON.stringify(attachments);
+    renderAttachList();
+  }
+  function renderAttachList(){
+    attachList.innerHTML = '';
+    attachments.forEach((a, idx)=>{
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.padding='8px'; card.style.border='1px solid #eee';
+      card.innerHTML = `
+        <div class="small" style="display:flex;gap:8px;align-items:center">
+          ${a.type && a.type.startsWith('image/') ? `<img src="${a.dataUrl}" alt="${a.name}" style="width:72px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #eee">` : '<div style="width:72px;height:48px;border:1px solid #eee;border-radius:4px;display:flex;align-items:center;justify-content:center">📄</div>'}
+          <div style="min-width:180px;max-width:360px;word-break:break-all">
+            <div>${a.name}</div>
+            <a href="${a.dataUrl}" download="${a.name}" target="_blank" rel="noopener">Preview/Download</a>
+          </div>
+          <button class="action-btn" data-idx="${idx}" style="margin-left:auto">Remove</button>
+        </div>`;
+      card.querySelector('button').addEventListener('click', ()=>{
+        const copy = attachments.slice();
+        copy.splice(idx,1);
+        setAttachments(copy);
+      });
+      attachList.appendChild(card);
+    });
+  }
+  async function filesToAttachments(files){
+    const arr = [];
+    for(const f of files){
+      const dataUrl = await new Promise((resolve)=>{ const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=()=>resolve(null); r.readAsDataURL(f); });
+      if(!dataUrl) continue;
+      arr.push({ name: f.name, size: f.size, type: f.type, dataUrl });
+    }
+    return arr;
+  }
+  drop.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', async ()=>{
+    const newAtt = await filesToAttachments(fileInput.files||[]);
+    setAttachments([...(attachments||[]), ...newAtt]);
+    fileInput.value = '';
+  });
+  drop.addEventListener('dragover', (e)=>{ e.preventDefault(); drop.style.background='#f7f7f7'; });
+  drop.addEventListener('dragleave', ()=>{ drop.style.background='#fcfcfc'; });
+  drop.addEventListener('drop', async (e)=>{
+    e.preventDefault(); drop.style.background='#fcfcfc';
+    const dt = e.dataTransfer; if(!dt) return;
+    const files = dt.files; if(!files || !files.length) return;
+    const newAtt = await filesToAttachments(files);
+    setAttachments([...(attachments||[]), ...newAtt]);
+  });
+  setAttachments(attachments);
   return container;
 }
 
@@ -645,17 +714,25 @@ document.getElementById('saveAssignmentBtn').addEventListener('click', ()=>{
           const max = Number(qn.querySelector('.q-file-maxmb')?.value || 100) || 100;
           const multi = !!qn.querySelector('.q-file-multi')?.checked;
           const ext = (qn.querySelector('.q-file-ext')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
-          return { maxSizeMB: max, allowMultiple: multi, allowedExtensions: ext };
+          let atts = [];
+          try { atts = JSON.parse(qn.querySelector('.q-attach-data')?.value || '[]'); } catch(_){ atts = []; }
+          return { maxSizeMB: max, allowMultiple: multi, allowedExtensions: ext, attachments: atts };
         }
         if(type==='link'){
           const url = (qn.querySelector('.q-link-url')?.value || '').trim();
-          return { resourceUrl: url };
+          let atts = [];
+          try { atts = JSON.parse(qn.querySelector('.q-attach-data')?.value || '[]'); } catch(_){ atts = []; }
+          return { resourceUrl: url, attachments: atts };
         }
         if(type==='essay'){
           // currently unlimited; reserved for future optional max
-          return { maxChars: null };
+          let atts = [];
+          try { atts = JSON.parse(qn.querySelector('.q-attach-data')?.value || '[]'); } catch(_){ atts = []; }
+          return { maxChars: null, attachments: atts };
         }
-        return {};
+        let atts = [];
+        try { atts = JSON.parse(qn.querySelector('.q-attach-data')?.value || '[]'); } catch(_){ atts = []; }
+        return { attachments: atts };
       })(),
       hint: qn.querySelector('.qhint').value,
       explanation: qn.querySelector('.qexp').value
