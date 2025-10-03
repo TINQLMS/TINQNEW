@@ -118,6 +118,7 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
     </header>
 
     <main>
+      <div id="maintBanner" style="position:sticky;top:0;z-index:40;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:10px;display:none;text-align:center;font-size:13px"></div>
       <div class="stats-grid" id="statsCards">
         <div class="stat-card">
           <h4>Total Users</h4>
@@ -900,6 +901,9 @@ document.getElementById('logoutBtnAside').addEventListener('click', async ()=>{ 
   document.getElementById('btnAddUser');
   // Handlers already attached above
   await initMaintenanceUI();
+  // Show maintenance banner (active/upcoming countdown)
+  await showMaintenanceBanner();
+  setInterval(showMaintenanceBanner, 1000);
 })();
 
 // ===== Maintenance Logic =====
@@ -1024,6 +1028,33 @@ async function notifyAllUsers(message){
     }
   });
   await Storage.saveUsers(users);
+}
+
+async function showMaintenanceBanner(){
+  const m = await getMaintenance();
+  const banner = document.getElementById('maintBanner');
+  if(!banner) return;
+  if(isActiveMaintenance(m)){
+    const until = m.manualUntil || (m.schedules||[]).find(s=> Date.now()>=s.startAt && Date.now()<=s.endAt)?.endAt;
+    const remain = Math.max(0, (until||Date.now()) - Date.now());
+    const h = Math.floor(remain/3600000);
+    const mm = Math.floor((remain%3600000)/60000);
+    const ss = Math.floor((remain%60000)/1000);
+    banner.style.display = 'block';
+    banner.textContent = `System maintenance ACTIVE — restores in ${h}h ${mm}m ${ss}s (until ${new Date(until||Date.now()).toLocaleString()})`;
+  } else {
+    const up = getUpcomingMaintenance(m);
+    if(up){
+      const remain = Math.max(0, up.startAt - Date.now());
+      const h = Math.floor(remain/3600000);
+      const mm = Math.floor((remain%3600000)/60000);
+      const ss = Math.floor((remain%60000)/1000);
+      banner.style.display = 'block';
+      banner.textContent = `Upcoming maintenance — starts in ${h}h ${mm}m ${ss}s (at ${new Date(up.startAt).toLocaleString()})`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 }
 </script>
 </body>

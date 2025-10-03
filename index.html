@@ -25,6 +25,7 @@
 <body>
   <!-- Landing -->
   <div id="landing" class="container" style="display:block;">
+    <div id="maintBanner" style="display:none;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:13px"></div>
     <h2>Select Role</h2>
     <a href="#" class="role-btn" onclick="showSignup('student')">Student</a>
     <a href="#" class="role-btn" onclick="showSignup('teacher')">Teacher</a>
@@ -34,6 +35,7 @@
 
   <!-- Signup -->
   <div id="signup" class="container">
+    <div id="maintBannerSignup" style="display:none;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:13px"></div>
     <h2 id="signup-title">Sign Up</h2>
     <form id="signupForm" novalidate>
       <input type="text" id="fullName" placeholder="Full Name" required>
@@ -50,6 +52,7 @@
 
   <!-- Login -->
   <div id="login" class="container">
+    <div id="maintBannerLogin" style="display:none;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:13px"></div>
     <h2>Login</h2>
     <form id="loginForm" novalidate>
       <input type="email" id="loginEmail" placeholder="Email" required>
@@ -64,6 +67,7 @@
 
   <!-- Reset Request -->
   <div id="reset" class="container">
+    <div id="maintBannerReset" style="display:none;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:13px"></div>
     <h2>Reset Password</h2>
     <form id="resetForm" novalidate>
       <input type="email" id="resetEmail" placeholder="Enter your email" required>
@@ -118,6 +122,43 @@
       const now = Date.now();
       const schedules = (Array.isArray(m.schedules)? m.schedules:[]).filter(s=> s.startAt>now).sort((a,b)=>a.startAt-b.startAt);
       return schedules[0] || null;
+    }
+
+    function mountMaintBanners(){
+      return {
+        landing: document.getElementById('maintBanner'),
+        signup: document.getElementById('maintBannerSignup'),
+        login: document.getElementById('maintBannerLogin'),
+        reset: document.getElementById('maintBannerReset'),
+      };
+    }
+
+    async function updateMaintBanners(){
+      const m = await getMaintenance();
+      const b = mountMaintBanners();
+      const banners = [b.landing,b.signup,b.login,b.reset];
+      const showText = (el, text)=>{ if(!el) return; if(text){ el.style.display='block'; el.textContent=text; } else { el.style.display='none'; el.textContent=''; } };
+      if(isActiveMaintenance(m)){
+        const until = m.manualUntil || (m.schedules||[]).find(s=> Date.now()>=s.startAt && Date.now()<=s.endAt)?.endAt;
+        const remain = Math.max(0, (until||Date.now()) - Date.now());
+        const h = Math.floor(remain/3600000);
+        const mm = Math.floor((remain%3600000)/60000);
+        const ss = Math.floor((remain%60000)/1000);
+        const msg = `System maintenance ACTIVE — restores in ${h}h ${mm}m ${ss}s (until ${new Date(until||Date.now()).toLocaleString()})`;
+        banners.forEach(el=> showText(el, msg));
+      } else {
+        const up = getUpcomingMaintenance(m);
+        if(up){
+          const remain = Math.max(0, up.startAt - Date.now());
+          const h = Math.floor(remain/3600000);
+          const mm = Math.floor((remain%3600000)/60000);
+          const ss = Math.floor((remain%60000)/1000);
+          const msg = `Upcoming system maintenance — starts in ${h}h ${mm}m ${ss}s (at ${new Date(up.startAt).toLocaleString()})`;
+          banners.forEach(el=> showText(el, msg));
+        } else {
+          banners.forEach(el=> showText(el, null));
+        }
+      }
     }
 
     function isAccountLocked(user) {
@@ -608,6 +649,9 @@
       if (supportsIndexedDB) {
         try { await migrateLocalStorageToIDBIfNeeded(); } catch (_) {}
       }
+      // show maintenance banners with countdowns
+      await updateMaintBanners();
+      setInterval(updateMaintBanners, 1000);
       // Legacy global session migration (from v1): if meta.currentUser or LS currentUser exists, attach to this tab session
       try {
         const legacy = localStorage.getItem('currentUser');

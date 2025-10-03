@@ -27,6 +27,7 @@
   </div>
 </header>
 <div class="container">
+  <div id="maintBanner" style="display:none;background:#fff4c2;border:1px solid #e6e9ee;border-radius:6px;padding:6px 10px;margin-bottom:8px;text-align:center;font-size:13px"></div>
   <div id="assignments"></div>
 </div>
 <script>
@@ -62,6 +63,7 @@ async function clearCurrentUser(){ const sid=getSessionId(); if(supportsIndexedD
 async function getMaintenance(){ const db = await openDB(); if(!db){ try { return JSON.parse(localStorage.getItem('maintenance')||'{}')||{}; } catch(_) { return {}; } } return new Promise((resolve)=>{ const tx=db.transaction('meta','readonly'); const st=tx.objectStore('meta'); const r=st.get('maintenance'); r.onsuccess=()=>resolve(r.result? r.result.value:{}); r.onerror=()=>resolve({}); }); }
 function isActiveMaintenance(m){ const now=Date.now(); if(m.enabled && m.manualUntil && now<m.manualUntil) return true; const s=Array.isArray(m.schedules)?m.schedules:[]; return s.some(x=> now>=x.startAt && now<=x.endAt); }
 function getUpcomingMaintenance(m){ const now=Date.now(); const s=(Array.isArray(m.schedules)?m.schedules:[]).filter(x=>x.startAt>now).sort((a,b)=>a.startAt-b.startAt); return s[0]||null; }
+async function updateMaintBanner(){ const m = await getMaintenance(); const b=document.getElementById('maintBanner'); if(!b) return; if(isActiveMaintenance(m)){ const until=m.manualUntil || (m.schedules||[]).find(s=> Date.now()>=s.startAt && Date.now()<=s.endAt)?.endAt; const remain=Math.max(0,(until||Date.now())-Date.now()); const h=Math.floor(remain/3600000), mm=Math.floor((remain%3600000)/60000), ss=Math.floor((remain%60000)/1000); b.style.display='block'; b.textContent=`System maintenance ACTIVE — restores in ${h}h ${mm}m ${ss}s (until ${new Date(until||Date.now()).toLocaleString()})`; } else { const up=getUpcomingMaintenance(m); if(up){ const remain=Math.max(0, up.startAt - Date.now()); const h=Math.floor(remain/3600000), mm=Math.floor((remain%3600000)/60000), ss=Math.floor((remain%60000)/1000); b.style.display='block'; b.textContent=`Upcoming system maintenance — starts in ${h}h ${mm}m ${ss}s (at ${new Date(up.startAt).toLocaleString()})`; } else { b.style.display='none'; } } }
 
 // Helpers
 function normalizeEmail(e){ return (e||'').trim().toLowerCase(); }
@@ -131,6 +133,8 @@ function escapeAttr(s){ if(s===null||s===undefined) return ''; return String(s).
 document.getElementById('logoutBtn').addEventListener('click', async ()=>{ await clearCurrentUser(); window.location.href='index.html'; });
 
 (async function init(){ await openDB(); renderAssignments(); })();
+setInterval(updateMaintBanner, 1000);
+updateMaintBanner();
 </script>
 </body>
 </html>
