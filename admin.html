@@ -135,6 +135,11 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
           <h4>Flagged Accounts</h4>
           <div class="value" id="statFlaggedAccounts">0</div>
         </div>
+        <div class="stat-card">
+          <h4>Maintenance</h4>
+          <div class="value" id="statMaintenance">Idle</div>
+          <div class="small" id="statMaintenanceSub"></div>
+        </div>
       </div>
 
       <!-- Resets -->
@@ -451,6 +456,31 @@ async function updateStats(){
   document.getElementById('statLockedAccounts').innerText = locked;
   const flagged = users.filter(u => u.flagged).length;
   document.getElementById('statFlaggedAccounts').innerText = flagged;
+
+  // Maintenance card
+  const m = await getMaintenance();
+  const active = isActiveMaintenance(m);
+  const upcoming = getUpcomingMaintenance(m);
+  const stat = document.getElementById('statMaintenance');
+  const sub = document.getElementById('statMaintenanceSub');
+  if(active){
+    const until = m.manualUntil || (m.schedules||[]).find(s=> Date.now()>=s.startAt && Date.now()<=s.endAt)?.endAt;
+    stat.innerText = 'ACTIVE';
+    function tick(){
+      const remain = Math.max(0, (until||Date.now()) - Date.now());
+      const mins = Math.floor(remain/60000); const secs = Math.floor((remain%60000)/1000);
+      sub.innerText = `Ends in ${mins}m ${secs}s (${new Date(until||Date.now()).toLocaleString()})`;
+      if(remain>0) window.__maintTimer = setTimeout(tick, 1000);
+    }
+    if(window.__maintTimer) clearTimeout(window.__maintTimer);
+    tick();
+  } else if(upcoming){
+    stat.innerText = 'UPCOMING';
+    sub.innerText = `Starts ${new Date(upcoming.startAt).toLocaleString()} for ${upcoming.durationHrs||Math.round((upcoming.endAt-upcoming.startAt)/3600000)}h`;
+  } else {
+    stat.innerText = 'Idle';
+    sub.innerText = '';
+  }
 }
 
 // ===== Resets =====
