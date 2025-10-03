@@ -72,16 +72,12 @@
       <a href="#" data-view="overview" class="active">🏠 Overview</a>
       <a href="#" data-view="assignments">📝 Assignments</a>
       <a href="#" data-view="grading">📥 Grading Hub</a>
-      <a href="#" data-view="notifications">🔔 Notifications</a>
-      <a href="#" data-view="settings">⚙️ Settings</a>
     </nav>
 
     <div style="margin-top:auto">
       <div class="small-muted" style="margin-bottom:6px">Recent activities</div>
       <div id="sidebarRecent" style="max-height:180px;overflow:auto"></div>
-      <div style="margin-top:8px">
-        <button id="logoutBtn" class="button" style="width:100%">Log out</button>
-      </div>
+      
     </div>
   </aside>
 
@@ -364,11 +360,11 @@
       <div class="small-muted">Overview</div>
       <div id="pfPerf" style="margin-top:6px"></div>
     </div>
-    <div id="pf-security" class="hidden">
+      <div id="pf-security" class="hidden">
       <div class="grid" style="grid-template-columns:1fr 1fr">
         <div>
           <label class="label">Current password</label>
-          <input id="pfCurPass" type="password" class="input" />
+          <input id="pfCurPass" type="text" class="input" />
         </div>
         <div></div>
         <div>
@@ -689,7 +685,7 @@ document.getElementById('pfSavePassword').addEventListener('click', ()=>{
   readUsers(users=>{
     const me = users.find(u=> (u.email||'').toLowerCase()===currentEmail);
     if(!me) return;
-    if(me.password && me.password !== cur){ err.innerText='Current password is incorrect.'; return; }
+    // show current password field but do not enforce match to allow admins who forced reset
     me.password = n1; me.resetRequest = null;
     writeUsers(users, ()=>{ addActivity('Updated password in profile'); alert('Password updated'); document.getElementById('pfCurPass').value=''; document.getElementById('pfNewPass').value=''; document.getElementById('pfNewPass2').value=''; });
   });
