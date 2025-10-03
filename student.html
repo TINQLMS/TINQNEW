@@ -58,6 +58,11 @@ function getSessionId(){ let sid=sessionStorage.getItem('sessionId'); if(!sid){ 
 async function getCurrentUser(){ const sid=getSessionId(); if(supportsIndexedDB){ try{ const db=await openDB(); if(db){ return await new Promise((resolve)=>{ const tx=db.transaction('sessions','readonly'); const r=tx.objectStore('sessions').get(sid); r.onsuccess=()=>resolve(r.result? r.result.user:null); r.onerror=()=>resolve(null); }); } }catch(_){ } } const raw=sessionStorage.getItem('currentUser'); return raw? JSON.parse(raw) : null; }
 async function clearCurrentUser(){ const sid=getSessionId(); if(supportsIndexedDB){ try{ const db=await openDB(); if(db){ await new Promise((resolve)=>{ const tx=db.transaction('sessions','readwrite'); tx.objectStore('sessions').delete(sid); tx.oncomplete=()=>resolve(); tx.onerror=()=>resolve(); }); } }catch(_){ } } sessionStorage.removeItem('currentUser'); }
 
+// Maintenance helpers (read-only)
+async function getMaintenance(){ const db = await openDB(); if(!db){ try { return JSON.parse(localStorage.getItem('maintenance')||'{}')||{}; } catch(_) { return {}; } } return new Promise((resolve)=>{ const tx=db.transaction('meta','readonly'); const st=tx.objectStore('meta'); const r=st.get('maintenance'); r.onsuccess=()=>resolve(r.result? r.result.value:{}); r.onerror=()=>resolve({}); }); }
+function isActiveMaintenance(m){ const now=Date.now(); if(m.enabled && m.manualUntil && now<m.manualUntil) return true; const s=Array.isArray(m.schedules)?m.schedules:[]; return s.some(x=> now>=x.startAt && now<=x.endAt); }
+function getUpcomingMaintenance(m){ const now=Date.now(); const s=(Array.isArray(m.schedules)?m.schedules:[]).filter(x=>x.startAt>now).sort((a,b)=>a.startAt-b.startAt); return s[0]||null; }
+
 // Helpers
 function normalizeEmail(e){ return (e||'').trim().toLowerCase(); }
 
@@ -65,6 +70,13 @@ function normalizeEmail(e){ return (e||'').trim().toLowerCase(); }
 async function renderAssignments(){
   const user = await getCurrentUser();
   if(!user || user.role!=='student'){ alert('Please login as a student'); window.location.href='index.html'; return; }
+  const m = await getMaintenance();
+  if(isActiveMaintenance(m)){
+    alert(`System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`);
+    await clearCurrentUser(); window.location.href='index.html'; return;
+  } else {
+    const up = getUpcomingMaintenance(m); if(up){ alert(`Upcoming system maintenance: ${new Date(up.startAt).toLocaleString()}`); }
+  }
   const assigns = await idbGetAll('assignments');
   const now = Date.now();
   const mine = assigns.filter(a=> now>=a.publishTs && now<=a.unpublishTs);

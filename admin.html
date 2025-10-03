@@ -187,6 +187,32 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
         </div>
         <div id="analyticsContainer"></div>
       </section>
+
+      <!-- Maintenance -->
+      <section>
+        <h3>Maintenance</h3>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+          <div class="card">
+            <div class="small-muted">Immediate maintenance</div>
+            <div class="toolbar" style="margin-top:8px">
+              <label class="small">Duration (hours)<input type="number" id="mmDuration" class="input" value="1" min="1" style="max-width:120px"/></label>
+              <button id="btnEnableMaint">Enable Maintenance Now</button>
+              <button class="secondary" id="btnDisableMaint">Disable</button>
+              <button class="danger" id="btnForceLogout">Force Logout Non-admins</button>
+            </div>
+            <div class="small">Status: <span id="maintStatus">Loading...</span></div>
+          </div>
+          <div class="card">
+            <div class="small-muted">Schedule maintenance</div>
+            <div class="toolbar" style="margin-top:8px">
+              <label class="small">Start<input type="datetime-local" id="schStart" class="input"/></label>
+              <label class="small">Duration (hours)<input type="number" id="schDuration" class="input" value="1" min="1" style="max-width:120px"/></label>
+              <button id="btnAddSchedule">Add Schedule</button>
+            </div>
+            <div id="scheduleList" class="small" style="margin-top:6px"></div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -843,7 +869,132 @@ document.getElementById('logoutBtnAside').addEventListener('click', async ()=>{ 
   // Default: show dashboard stats cards already visible
   document.getElementById('btnAddUser');
   // Handlers already attached above
+  await initMaintenanceUI();
 })();
+
+// ===== Maintenance Logic =====
+async function getMaintenance(){
+  const db = await openDB();
+  if(!db) {
+    try { return JSON.parse(localStorage.getItem('maintenance')||'{}') || {}; } catch(_) { return {}; }
+  }
+  return await new Promise((resolve)=>{
+    const tx = db.transaction('meta','readonly');
+    const st = tx.objectStore('meta');
+    const r = st.get('maintenance');
+    r.onsuccess = ()=> resolve(r.result? r.result.value : {});
+    r.onerror = ()=> resolve({});
+  });
+}
+async function setMaintenance(val){
+  const db = await openDB();
+  if(!db){ localStorage.setItem('maintenance', JSON.stringify(val||{})); return; }
+  await new Promise((resolve)=>{
+    const tx = db.transaction('meta','readwrite');
+    tx.objectStore('meta').put({key:'maintenance', value: val||{} });
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> resolve();
+  });
+}
+function isActiveMaintenance(m){
+  const now = Date.now();
+  if(m.enabled && m.manualUntil && now < m.manualUntil) return true;
+  const schedules = Array.isArray(m.schedules)? m.schedules:[];
+  return schedules.some(s => now>=s.startAt && now<=s.endAt);
+}
+function getUpcomingMaintenance(m){
+  const now = Date.now();
+  const schedules = (Array.isArray(m.schedules)? m.schedules:[]).filter(s => s.startAt>now).sort((a,b)=>a.startAt-b.startAt);
+  return schedules[0] || null;
+}
+async function forceLogoutNonAdmins(){
+  const db = await openDB(); if(!db) return;
+  const users = await Storage.getUsers();
+  const nonAdmins = new Set(users.filter(u=>u.role!=='admin').map(u=> (u.email||'').toLowerCase()));
+  await new Promise((resolve)=>{
+    const tx = db.transaction('sessions','readwrite');
+    const st = tx.objectStore('sessions');
+    const req = st.getAll();
+    req.onsuccess = ()=>{
+      const all = req.result||[];
+      all.forEach(sess => { const email = (sess.user?.email||'').toLowerCase(); if(nonAdmins.has(email)) st.delete(sess.id); });
+    };
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> resolve();
+  });
+}
+async function initMaintenanceUI(){
+  const statusEl = document.getElementById('maintStatus');
+  const mmDur = document.getElementById('mmDuration');
+  const btnEnable = document.getElementById('btnEnableMaint');
+  const btnDisable = document.getElementById('btnDisableMaint');
+  const btnForce = document.getElementById('btnForceLogout');
+  const schStart = document.getElementById('schStart');
+  const schDur = document.getElementById('schDuration');
+  const btnAddSch = document.getElementById('btnAddSchedule');
+  const schList = document.getElementById('scheduleList');
+
+  async function refresh(){
+    const m = await getMaintenance();
+    const active = isActiveMaintenance(m);
+    const upcoming = getUpcomingMaintenance(m);
+    statusEl.innerText = active ? `ACTIVE until ${m.manualUntil? new Date(m.manualUntil).toLocaleString() : ''}` : (upcoming? `Upcoming: ${new Date(upcoming.startAt).toLocaleString()} - ${new Date(upcoming.endAt).toLocaleString()}` : 'Idle');
+    const schedules = (m.schedules||[]).slice().sort((a,b)=>a.startAt-b.startAt);
+    schList.innerHTML = schedules.length? schedules.map(s=>{
+      const state = (Date.now()<s.startAt)? 'UPCOMING' : (Date.now()<=s.endAt? 'ACTIVE':'EXPIRED');
+      return `<div class="request-block"><div><b>${new Date(s.startAt).toLocaleString()}</b> ➜ ${new Date(s.endAt).toLocaleString()} <span class="badge ${state==='ACTIVE'?'approved':(state==='UPCOMING'?'pending':'expired')}">${state}</span></div>
+      <div class="action-grid"><button data-act="notify" data-id="${s.id}" class="secondary">Notify Users</button><button data-act="remove" data-id="${s.id}" class="danger">Remove</button></div></div>`;
+    }).join('') : '<div class="small">No schedules</div>';
+
+    schList.onclick = async (e)=>{
+      const b = e.target.closest('button'); if(!b) return;
+      const act = b.getAttribute('data-act'); const id = b.getAttribute('data-id');
+      const m = await getMaintenance(); m.schedules = m.schedules||[];
+      const sched = m.schedules.find(x=>x.id===id);
+      if(act==='remove'){
+        m.schedules = m.schedules.filter(x=>x.id!==id); await setMaintenance(m); await refresh();
+      }
+      if(act==='notify' && sched){ await notifyAllUsers(`Scheduled maintenance: ${new Date(sched.startAt).toLocaleString()} - ${new Date(sched.endAt).toLocaleString()}`); alert('Notifications sent'); }
+    };
+  }
+
+  btnEnable.onclick = async ()=>{
+    const hrs = Math.max(1, Number(mmDur.value)||1);
+    const now = Date.now();
+    const until = now + hrs*3600*1000;
+    const m = await getMaintenance();
+    m.enabled = true; m.manualUntil = until; m.schedules = m.schedules||[];
+    await setMaintenance(m);
+    await forceLogoutNonAdmins();
+    await refresh();
+    alert('Maintenance enabled');
+  };
+  btnDisable.onclick = async ()=>{
+    const m = await getMaintenance(); m.enabled=false; m.manualUntil=null; await setMaintenance(m); await refresh(); alert('Maintenance disabled'); };
+  btnForce.onclick = async ()=>{ await forceLogoutNonAdmins(); alert('Force logout executed'); };
+  btnAddSch.onclick = async ()=>{
+    const startVal = schStart.value; const durHrs = Math.max(1, Number(schDur.value)||1);
+    if(!startVal){ alert('Select start date/time'); return; }
+    const startAt = new Date(startVal).getTime(); const endAt = startAt + durHrs*3600*1000;
+    if(isNaN(startAt)) { alert('Invalid start date'); return; }
+    const m = await getMaintenance(); m.schedules = m.schedules||[];
+    m.schedules.push({ id: 'sch_'+Date.now(), startAt, endAt, createdAt: Date.now(), durationHrs: durHrs });
+    await setMaintenance(m); await refresh(); alert('Schedule added');
+  };
+
+  await refresh();
+}
+
+async function notifyAllUsers(message){
+  const users = await Storage.getUsers();
+  users.forEach(u=>{
+    if(u.role!=='admin'){
+      u.notifications = u.notifications||[];
+      u.notifications.push({ message, timestamp: Date.now(), read:false });
+    }
+  });
+  await Storage.saveUsers(users);
+}
 </script>
 </body>
 </html>

@@ -94,6 +94,32 @@
       return (email || '').trim().toLowerCase();
     }
 
+    // Maintenance helpers (shared)
+    async function getMaintenance() {
+      if (!supportsIndexedDB) {
+        try { return JSON.parse(localStorage.getItem('maintenance')||'{}')||{}; } catch(_) { return {}; }
+      }
+      const db = await openDB();
+      return new Promise((resolve)=>{
+        const tx = db.transaction('meta','readonly');
+        const st = tx.objectStore('meta');
+        const r = st.get('maintenance');
+        r.onsuccess = ()=> resolve(r.result? r.result.value : {});
+        r.onerror = ()=> resolve({});
+      });
+    }
+    function isActiveMaintenance(m){
+      const now = Date.now();
+      if(m.enabled && m.manualUntil && now < m.manualUntil) return true;
+      const schedules = Array.isArray(m.schedules)? m.schedules:[];
+      return schedules.some(s => now>=s.startAt && now<=s.endAt);
+    }
+    function getUpcomingMaintenance(m){
+      const now = Date.now();
+      const schedules = (Array.isArray(m.schedules)? m.schedules:[]).filter(s=> s.startAt>now).sort((a,b)=>a.startAt-b.startAt);
+      return schedules[0] || null;
+    }
+
     function isAccountLocked(user) {
       return !!(user && user.lockedUntil && Date.now() < user.lockedUntil);
     }
@@ -295,6 +321,13 @@
     // ---- Signup ----
     document.getElementById('signupForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const m = await getMaintenance();
+      if(isActiveMaintenance(m)){
+        alert(`System is currently undergoing maintenance. Try again after ${new Date(m.manualUntil||Date.now()).toLocaleString()}. Thank you.`);
+        return;
+      }
+      const upcoming = getUpcomingMaintenance(m);
+      if(upcoming){ alert(`Upcoming system maintenance: ${new Date(upcoming.startAt).toLocaleString()}`); }
       const fullName = (document.getElementById('fullName').value || '').trim();
       const email = normalizeEmail(document.getElementById('email').value);
       const phone = (document.getElementById('phone').value || '').trim();
@@ -340,6 +373,13 @@
     // ---- Login ----
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const m = await getMaintenance();
+      if(isActiveMaintenance(m)){
+        alert(`System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`);
+        return;
+      }
+      const upcoming = getUpcomingMaintenance(m);
+      if(upcoming){ alert(`Upcoming system maintenance: ${new Date(upcoming.startAt).toLocaleString()}`); }
       const email = normalizeEmail(document.getElementById('loginEmail').value);
       const password = document.getElementById('loginPassword').value;
       let users = await getUsers();
@@ -430,6 +470,13 @@
     // ---- Reset ----
     document.getElementById('resetForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const m = await getMaintenance();
+      if(isActiveMaintenance(m)){
+        document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`;
+        return;
+      }
+      const upcoming = getUpcomingMaintenance(m);
+      if(upcoming){ document.getElementById('resetError').innerText = `Upcoming system maintenance: ${new Date(upcoming.startAt).toLocaleString()}`; }
       const email = normalizeEmail(document.getElementById('resetEmail').value);
       let users = await getUsers();
       let user = users.find(u => u.email === email);
