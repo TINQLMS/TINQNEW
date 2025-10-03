@@ -1103,6 +1103,12 @@ async function showMaintenanceBanner(){
     const ss = Math.floor((remain%60000)/1000);
     banner.style.display = 'block';
     banner.textContent = `System maintenance ACTIVE — restores in ${h}h ${mm}m ${ss}s (until ${new Date(until||Date.now()).toLocaleString()})`;
+    if(!window.__maintPrevActive){
+      // Transition to active: force logout non-admins and broadcast
+      await forceLogoutNonAdmins();
+      sendMaintenanceBroadcast('maintenance_active', { until });
+    }
+    window.__maintPrevActive = true;
   } else {
     const up = getUpcomingMaintenance(m);
     if(up){
@@ -1115,6 +1121,11 @@ async function showMaintenanceBanner(){
     } else {
       banner.style.display = 'none';
     }
+    if(window.__maintPrevActive){
+      // Transition to inactive
+      sendMaintenanceBroadcast('maintenance_disabled', {});
+    }
+    window.__maintPrevActive = false;
   }
 }
 </script>
