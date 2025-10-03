@@ -364,7 +364,7 @@
       e.preventDefault();
       const m = await getMaintenance();
       if(isActiveMaintenance(m)){
-        alert(`System is currently undergoing maintenance. Try again after ${new Date(m.manualUntil||Date.now()).toLocaleString()}. Thank you.`);
+        alert(`System is currently undergoing maintenance. Signups are disabled until ${new Date(m.manualUntil||Date.now()).toLocaleString()}.`);
         return;
       }
       const upcoming = getUpcomingMaintenance(m);
@@ -414,14 +414,23 @@
     // ---- Login ----
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const email = normalizeEmail(document.getElementById('loginEmail').value);
       const m = await getMaintenance();
       if(isActiveMaintenance(m)){
-        alert(`System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`);
-        return;
+        let allow = false;
+        try {
+          const users = await getUsers();
+          const u = users.find(u => u.email === email);
+          allow = !!(u && u.role === 'admin');
+        } catch(_){ allow = false; }
+        if(!allow){
+          alert(`System is currently undergoing maintenance. Only admin login allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`);
+          return;
+        }
       }
       const upcoming = getUpcomingMaintenance(m);
       if(upcoming){ alert(`Upcoming system maintenance: ${new Date(upcoming.startAt).toLocaleString()}`); }
-      const email = normalizeEmail(document.getElementById('loginEmail').value);
+      
       const password = document.getElementById('loginPassword').value;
       let users = await getUsers();
       let user = users.find(u => u.email === email);
@@ -511,14 +520,24 @@
     // ---- Reset ----
     document.getElementById('resetForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const email = normalizeEmail(document.getElementById('resetEmail').value);
       const m = await getMaintenance();
       if(isActiveMaintenance(m)){
-        document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`;
-        return;
+        try {
+          const users = await getUsers();
+          const u = users.find(u => u.email === email);
+          if(!(u && u.role === 'admin')){
+            document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`;
+            return;
+          }
+        } catch(_){
+          document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`;
+          return;
+        }
       }
       const upcoming = getUpcomingMaintenance(m);
       if(upcoming){ document.getElementById('resetError').innerText = `Upcoming system maintenance: ${new Date(upcoming.startAt).toLocaleString()}`; }
-      const email = normalizeEmail(document.getElementById('resetEmail').value);
+      
       let users = await getUsers();
       let user = users.find(u => u.email === email);
 
