@@ -226,6 +226,23 @@
 
               <div id="assignmentView"></div>
 
+              <!-- Group manager -->
+              <div id="groupManager" class="card" style="background:#fafafa;border:1px dashed #e6e9ee;margin-top:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div><strong>Group Members</strong> <span class="small-muted" id="groupMeta"></span></div>
+                  <div class="small-muted" id="groupHint">Requires at least 2 members for group assignments</div>
+                </div>
+                <div id="groupChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                <div class="form-row" style="margin-top:8px;gap:8px">
+                  <input id="groupEmailInput" class="input" placeholder="Add member email (student)" />
+                  <button class="action-btn" id="addGroupBtn">Add</button>
+                </div>
+                <div class="small-muted" id="groupValidation" style="color:#b32d2d;margin-top:6px"></div>
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+                  <button class="action-btn" id="saveGroupBtn">Save Group List</button>
+                </div>
+              </div>
+
               <hr />
               <div>
                 <div class="controls-row">
@@ -885,8 +902,92 @@ function openSubmissionDetail(key){
       av.appendChild(questionsContainer);
 
       renderGradeSummaryForSubmission(s, as);
+      renderGroupManager(s, as);
     });
   });
+}
+
+// ===== Group Manager UI =====
+function renderGroupManager(sub, as){
+  const gm = document.getElementById('groupManager');
+  const chips = document.getElementById('groupChips');
+  const meta = document.getElementById('groupMeta');
+  const hint = document.getElementById('groupHint');
+  const validation = document.getElementById('groupValidation');
+  const emailInput = document.getElementById('groupEmailInput');
+  const addBtn = document.getElementById('addGroupBtn');
+  const saveBtn = document.getElementById('saveGroupBtn');
+
+  const isGroup = !!as.groupRequired;
+  gm.style.display = 'block';
+  hint.style.display = isGroup ? 'block' : 'none';
+  validation.innerText = '';
+
+  // Build working list
+  const primary = normalizeEmail(sub.student||sub.studentEmail||'');
+  let members = Array.from(new Set([primary, ...((sub.groupMembers||[]).map(normalizeEmail))])).filter(Boolean);
+
+  function redraw(){
+    chips.innerHTML = '';
+    members.forEach(m => {
+      const tag = document.createElement('div');
+      tag.className = 'badge';
+      tag.style.display='inline-flex'; tag.style.alignItems='center'; tag.style.gap='6px';
+      tag.innerHTML = `${m} <button class="action-btn" data-email="${m}">×</button>`;
+      const btn = tag.querySelector('button');
+      btn.style.padding='2px 6px'; btn.style.borderRadius='999px'; btn.style.fontSize='12px';
+      btn.addEventListener('click', ()=>{
+        if(m===primary){ validation.innerText = 'Cannot remove the primary submitter.'; return; }
+        members = members.filter(x=>x!==m);
+        redraw(); validate();
+      });
+      chips.appendChild(tag);
+    });
+    meta.innerText = `(${members.length} member${members.length===1?'':'s'})`;
+  }
+
+  function validate(){
+    validation.innerText = '';
+    if(isGroup && members.length < 2){
+      validation.innerText = 'Group assignments require at least 2 members.';
+      return false;
+    }
+    const invalid = members.find(m => !/^\S+@\S+\.\S+$/.test(m));
+    if(invalid){ validation.innerText = `Invalid email: ${invalid}`; return false; }
+    return true;
+  }
+
+  addBtn.onclick = () => {
+    const val = normalizeEmail(emailInput.value);
+    emailInput.value = '';
+    if(!val){ validation.innerText = 'Enter an email to add.'; return; }
+    if(!/^\S+@\S+\.\S+$/.test(val)){ validation.innerText = 'Enter a valid email address.'; return; }
+    if(members.includes(val)){ validation.innerText = 'Already in group.'; return; }
+    members.push(val);
+    redraw(); validate();
+  };
+
+  saveBtn.onclick = () => {
+    if(!validate()) return;
+    readSubmissions(subs => {
+      // Update base record for this submission
+      const key = sub.id || `${sub.assignmentId}::${sub.student||sub.studentEmail}`;
+      const s = findSubmissionByKey(subs, key);
+      if(!s) return;
+      s.groupMembers = members;
+      ensureSubmissionHasGroupId(s);
+      const result = ensureGroupReplication(subs, s);
+      // propagate groupId and members to all linked records
+      const final = (s.groupId) ? result.subs.map(rec => {
+        if(rec.assignmentId===s.assignmentId && rec.groupId===s.groupId){ return { ...rec, groupMembers: s.groupMembers, groupId: s.groupId }; }
+        return rec;
+      }) : result.subs;
+      writeSubmissions(final, ()=>{ addActivity('Updated group list'); refreshSubmissionsTable(); });
+    });
+  };
+
+  redraw();
+  validate();
 }
 
 /* Toggle lock for submission */
