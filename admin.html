@@ -1011,12 +1011,14 @@ async function initMaintenanceUI(){
     m.enabled = true; m.manualUntil = until; m.schedules = m.schedules||[];
     await setMaintenance(m);
     await forceLogoutNonAdmins();
+    // Broadcast for tabs without IndexedDB session control
+    sendMaintenanceBroadcast('maintenance_active', { until });
     await refresh();
     alert('Maintenance enabled');
   };
   btnDisable.onclick = async ()=>{
-    const m = await getMaintenance(); m.enabled=false; m.manualUntil=null; await setMaintenance(m); await refresh(); alert('Maintenance disabled'); };
-  btnForce.onclick = async ()=>{ await forceLogoutNonAdmins(); alert('Force logout executed'); };
+    const m = await getMaintenance(); m.enabled=false; m.manualUntil=null; await setMaintenance(m); sendMaintenanceBroadcast('maintenance_disabled', {}); await refresh(); alert('Maintenance disabled'); };
+  btnForce.onclick = async ()=>{ await forceLogoutNonAdmins(); sendMaintenanceBroadcast('force_logout', {}); alert('Force logout executed'); };
   btnAddSch.onclick = async ()=>{
     const startVal = schStart.value; const durHrs = Math.max(1, Number(schDur.value)||1);
     if(!startVal){ alert('Select start date/time'); return; }
@@ -1039,6 +1041,20 @@ async function notifyAllUsers(message){
     }
   });
   await Storage.saveUsers(users);
+}
+
+// ===== Maintenance Broadcast (for tabs without IndexedDB) =====
+let __maintBC;
+try { __maintBC = new BroadcastChannel('smartlms_maint'); } catch(_) { __maintBC = null; }
+function sendMaintenanceBroadcast(type, payload){
+  const msg = { type, payload, ts: Date.now() };
+  try { __maintBC && __maintBC.postMessage(msg); } catch(_) {}
+  try {
+    // storage-event fallback
+    localStorage.setItem('smartlms_maint_broadcast', JSON.stringify(msg));
+    // ensure subsequent events fire reliably
+    setTimeout(()=>{ try { localStorage.removeItem('smartlms_maint_broadcast'); } catch(_){} }, 0);
+  } catch(_){ }
 }
 
 // Quick actions

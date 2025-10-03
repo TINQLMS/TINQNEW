@@ -135,6 +135,10 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{ await
 (async function init(){ await openDB(); renderAssignments(); })();
 setInterval(updateMaintBanner, 1000);
 updateMaintBanner();
+
+// Listen for maintenance broadcasts
+try { const bc = new BroadcastChannel('smartlms_maint'); bc.onmessage = async ()=>{ await updateMaintBanner(); }; } catch(_) {}
+window.addEventListener('storage', async (e)=>{ if(e.key==='smartlms_maint_broadcast'){ await updateMaintBanner(); } });
 </script>
 </body>
 </html>

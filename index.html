@@ -124,6 +124,15 @@
       return schedules[0] || null;
     }
 
+    // Listen for maintenance broadcasts for tabs without IndexedDB session control
+    try {
+      const bc = new BroadcastChannel('smartlms_maint');
+      bc.onmessage = async (ev)=>{ const msg = ev.data||{}; if(msg.type==='maintenance_active'){ await updateMaintBanners(); } if(msg.type==='maintenance_disabled'){ await updateMaintBanners(); } };
+    } catch(_) {}
+    window.addEventListener('storage', async (e)=>{
+      if(e.key==='smartlms_maint_broadcast'){ await updateMaintBanners(); }
+    });
+
     function mountMaintBanners(){
       return {
         landing: document.getElementById('maintBanner'),

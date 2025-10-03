@@ -539,6 +539,22 @@ async function showUpcomingMaintenanceIfAny(){
   }
 }
 
+// Listen for maintenance broadcasts (fallback when IndexedDB sessions unavailable)
+try {
+  const __maintBC = new BroadcastChannel('smartlms_maint');
+  __maintBC.onmessage = async (ev)=>{
+    const msg = ev.data||{};
+    if(msg.type==='maintenance_active' || msg.type==='maintenance_disabled' || msg.type==='force_logout'){
+      await showUpcomingMaintenanceIfAny();
+    }
+  };
+} catch(_) {}
+window.addEventListener('storage', async (e)=>{
+  if(e.key==='smartlms_maint_broadcast'){
+    await showUpcomingMaintenanceIfAny();
+  }
+});
+
 /* ---------------------------
   Mobile nav
 ----------------------------*/
