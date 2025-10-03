@@ -505,6 +505,40 @@ async function requireTeacher(cb){
   if(cb) cb(user);
 }
 
+// ===== Maintenance banner (upcoming countdown) =====
+async function getMaintenance(){
+  const db = await openDB();
+  if(!db){ try { return JSON.parse(localStorage.getItem('maintenance')||'{}')||{}; } catch(_) { return {}; } }
+  return new Promise((resolve)=>{ const tx=db.transaction('meta','readonly'); const st=tx.objectStore('meta'); const r=st.get('maintenance'); r.onsuccess=()=>resolve(r.result? r.result.value:{}); r.onerror=()=>resolve({}); });
+}
+function isActiveMaintenance(m){ const now=Date.now(); if(m.enabled && m.manualUntil && now<m.manualUntil) return true; const s=Array.isArray(m.schedules)?m.schedules:[]; return s.some(x=> now>=x.startAt && now<=x.endAt); }
+function getUpcomingMaintenance(m){ const now=Date.now(); const s=(Array.isArray(m.schedules)?m.schedules:[]).filter(x=>x.startAt>now).sort((a,b)=>a.startAt-b.startAt); return s[0]||null; }
+function ensureMaintBanner(){ let b=document.getElementById('maintBanner'); if(!b){ b=document.createElement('div'); b.id='maintBanner'; b.style.cssText='position:sticky;top:0;z-index:50;background:#fff4c2;border-bottom:1px solid #e6e9ee;padding:6px 10px;text-align:center;font-size:13px;display:none'; const hdr=document.querySelector('header'); hdr.parentNode.insertBefore(b, hdr.nextSibling);} return b; }
+let __maintTick;
+async function showUpcomingMaintenanceIfAny(){
+  const m = await getMaintenance();
+  if(isActiveMaintenance(m)){
+    alert(`System is currently undergoing maintenance. Try again after ${new Date((m.manualUntil)||Date.now()).toLocaleString()}. Thank you.`);
+    await clearCurrentUser(); window.location.href='index.html'; return;
+  }
+  const up = getUpcomingMaintenance(m); const banner = ensureMaintBanner();
+  if(up){
+    banner.style.display='block';
+    function tick(){
+      const remain = Math.max(0, up.startAt - Date.now());
+      const h = Math.floor(remain/3600000);
+      const mm = Math.floor((remain%3600000)/60000);
+      const ss = Math.floor((remain%60000)/1000);
+      banner.textContent = `Upcoming system maintenance: ${new Date(up.startAt).toLocaleString()} — starts in ${h}h ${mm}m ${ss}s`;
+      if(remain<=0 && __maintTick){ clearInterval(__maintTick); }
+    }
+    if(__maintTick) clearInterval(__maintTick);
+    tick(); __maintTick = setInterval(tick, 1000);
+  } else {
+    banner.style.display='none'; if(__maintTick) clearInterval(__maintTick);
+  }
+}
+
 /* ---------------------------
   Mobile nav
 ----------------------------*/
@@ -1582,6 +1616,8 @@ function loadInitialDataIfEmpty(cb){
       // Do not auto-insert demo questions
       showView('overview');
     });
+    await showUpcomingMaintenanceIfAny();
+    setInterval(showUpcomingMaintenanceIfAny, 60000);
   });
 })();
 </script>
