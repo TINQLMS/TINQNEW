@@ -54,6 +54,7 @@ button.danger:hover{box-shadow:0 4px 8px rgba(245,101,101,.3)}
 .request-block,.user-card{border:1px solid var(--border);padding:15px;margin:10px 0;border-radius:8px;background:#fafbfc;transition:box-shadow .2s}
 .request-block:hover,.user-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
 .small{font-size:13px;color:var(--muted)}
+.small-muted{font-size:12px;color:var(--muted)}
 /* Password reveal UI */
 .pwd-wrap{position:relative;display:inline-block;padding-right:18px}
 .pwd{letter-spacing:2px}
@@ -117,7 +118,7 @@ header .menu{display:none;background:#ffffff22;border:0;color:#fff;border-radius
         <span class="header-title">Admin Dashboard</span>
       </div>
       <div class="actions">
-        <button id="logoutBtn" type="button" title="Logout">Logout</button>
+        <button id="logoutBtn" type="button" title="Logout" class="secondary">Logout</button>
         <div id="notifBell" aria-expanded="false">🔔 <span id="unreadCount"></span></div>
       </div>
       <div id="notifList" role="listbox" aria-label="Notifications"></div>
@@ -415,6 +416,8 @@ function switchView(view){
   document.querySelectorAll('main > section').forEach(sec=>{
     sec.classList.toggle('hidden', sec.dataset.view !== view);
   });
+  // Accessibility: update aria-selected on nav buttons
+  document.querySelectorAll('.nav button').forEach(b=> b.setAttribute('aria-selected', b.dataset.view===view ? 'true' : 'false'));
   if(view==='resets') renderResetRequests();
   if(view==='users') renderUsers();
   if(view==='analytics') renderAnalytics();
@@ -511,7 +514,7 @@ async function updateStats(){
   document.getElementById('statTotalUsers').innerText = users.length;
   const pendingResets = users.filter(u => u.resetRequest && u.resetRequest.status==='pending').length;
   document.getElementById('statPendingResets').innerText = pendingResets;
-  document.getElementById('badgePending').innerText = pendingResets;
+  document.getElementById('badgePending').innerText = pendingResets || '';
   const locked = users.filter(u => isLocked(u)).length;
   document.getElementById('statLockedAccounts').innerText = locked;
   const flagged = users.filter(u => u.flagged).length;
@@ -1122,6 +1125,8 @@ async function initMaintenanceUI(){
   };
 
   await refresh();
+  // Prevent duplicate handler bindings across repeated init calls
+  btnEnable.onclick = btnEnable.onclick; btnDisable.onclick = btnDisable.onclick; btnForce.onclick = btnForce.onclick; btnAddSch.onclick = btnAddSch.onclick; schList.onclick = schList.onclick;
 }
 
 async function notifyAllUsers(message){
