@@ -462,6 +462,8 @@ function renderNotifications(user){
         const idx = users.findIndex(u=>u.email===admin.email);
         if(idx>=0) users[idx] = admin;
         await Storage.saveUsers(users);
+        // Keep session in sync so refresh won't restore old notifications
+        try { await setCurrentUser(admin); } catch(_) {}
         document.getElementById('unreadCount').innerText = '';
         renderNotifications(admin);
       };
