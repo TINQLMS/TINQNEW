@@ -675,9 +675,9 @@ function userCardHTML(u){
     ${u.active===false ? '<span class="badge inactive">INACTIVE</span>' : '<span class="badge active">ACTIVE</span>'}
     ${u.flagged ? '<span class="badge denied">FLAGGED</span>' : ''}
     ${isLocked ? '<span class="badge pending">LOCKED</span>' : ''}
-    <div class="small">Phone: ${u.phone || 'n/a'} | Password: ${(
+    <div class="small">Phone: ${u.phone || 'n/a'} | Password: <span class="pwd" data-email="${u.email}" data-pass="${(
       u && u.resetRequest && u.resetRequest.status==='approved' && (!u.resetRequest.expiresAt || Date.now() <= u.resetRequest.expiresAt)
-    ) ? ((u.resetRequest.tempPassword||'') + ' (temp)') : (u.password || '')}</div>
+    ) ? ((u.resetRequest.tempPassword||'') + ' (temp)') : (u.password || '')}">••••••••</span> <button type="button" class="secondary" data-act="togglePwd" data-email="${u.email}">Show</button></div>
     <div class="small">Failed Attempts: ${u.failedAttempts||0} | Lockouts: ${u.lockouts||0} | Joined: ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'n/a'}</div>
     ${isLocked ? `<div class="small">Locked Until: ${new Date(u.lockedUntil).toLocaleString()}</div>` : ''}
     <div class="action-grid">
@@ -731,6 +731,14 @@ async function renderUsers(){
     if(!btn) return;
     const email = btn.getAttribute('data-email');
     const act = btn.getAttribute('data-act');
+    if(act==='togglePwd'){
+      const span = container.querySelector(`.pwd[data-email="${email}"]`);
+      if(!span) return;
+      const masked = span.getAttribute('data-masked') !== 'false';
+      if(masked){ span.textContent = span.getAttribute('data-pass') || ''; span.setAttribute('data-masked','false'); btn.textContent = 'Hide'; }
+      else { span.textContent = '••••••••'; span.setAttribute('data-masked','true'); btn.textContent = 'Show'; }
+      return;
+    }
     const users = await Storage.getUsers();
     const u = users.find(x=>x.email===email);
     if(!u) return;
