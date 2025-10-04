@@ -751,8 +751,22 @@ async function renderUsers(){
       pushNotification(u, u.flagged ? 'Your account has been flagged by an administrator.' : 'The flag on your account has been removed.');
       await Storage.saveUsers(users); renderUsers(); updateStats(); return;
     }
-    if(act==='lock30'){ u.lockedUntil = Date.now() + 30*60000; u.failedAttempts=0; u.lockouts=(u.lockouts||0)+1; pushNotification(u,'Your account was locked by an administrator for 30 minutes.'); await Storage.saveUsers(users); renderUsers(); return; }
-    if(act==='lock1440'){ u.lockedUntil = Date.now() + 1440*60000; u.failedAttempts=0; u.lockouts=(u.lockouts||0)+1; pushNotification(u,'Your account was locked by an administrator for 24 hours.'); await Storage.saveUsers(users); renderUsers(); return; }
+    if(act==='lock30'){
+      u.lockedUntil = Date.now() + 30*60000; u.failedAttempts=0; u.lockouts=(u.lockouts||0)+1;
+      pushNotification(u,'Your account was locked by an administrator for 30 minutes.');
+      await Storage.saveUsers(users);
+      await forceLogoutUser(u.email);
+      sendMaintenanceBroadcast && sendMaintenanceBroadcast('force_logout_user', { email: u.email });
+      renderUsers(); return;
+    }
+    if(act==='lock1440'){
+      u.lockedUntil = Date.now() + 1440*60000; u.failedAttempts=0; u.lockouts=(u.lockouts||0)+1;
+      pushNotification(u,'Your account was locked by an administrator for 24 hours.');
+      await Storage.saveUsers(users);
+      await forceLogoutUser(u.email);
+      sendMaintenanceBroadcast && sendMaintenanceBroadcast('force_logout_user', { email: u.email });
+      renderUsers(); return;
+    }
     if(act==='unlock'){ u.lockedUntil=null; u.failedAttempts=0; pushNotification(u,'Your account lock was removed by an administrator.'); await Storage.saveUsers(users); renderUsers(); return; }
   }, { once:true });
 }
@@ -1014,6 +1028,22 @@ async function forceLogoutNonAdmins(){
     tx.oncomplete = ()=> resolve();
     tx.onerror = ()=> resolve();
   });
+}
+async function forceLogoutUser(email){
+  const db = await openDB();
+  const lower = (email||'').toLowerCase();
+  if(db){
+    await new Promise((resolve)=>{
+      const tx = db.transaction('sessions','readwrite');
+      const st = tx.objectStore('sessions');
+      const all = st.getAll();
+      all.onsuccess = ()=>{
+        (all.result||[]).forEach(sess => { if((sess.user?.email||'').toLowerCase()===lower) st.delete(sess.id); });
+      };
+      tx.oncomplete = ()=> resolve();
+      tx.onerror = ()=> resolve();
+    });
+  }
 }
 async function initMaintenanceUI(){
   const statusEl = document.getElementById('maintStatus');

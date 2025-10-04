@@ -139,6 +139,9 @@ updateMaintBanner();
 // Listen for maintenance broadcasts
 try { const bc = new BroadcastChannel('smartlms_maint'); bc.onmessage = async ()=>{ await updateMaintBanner(); }; } catch(_) {}
 window.addEventListener('storage', async (e)=>{ if(e.key==='smartlms_maint_broadcast'){ await updateMaintBanner(); } });
+
+// Listen for admin forced logout of a single user
+try { const bc2 = new BroadcastChannel('smartlms_maint'); bc2.onmessage = async (ev)=>{ const msg=ev.data||{}; if(msg.type==='force_logout_user'){ const email=(msg.payload&&msg.payload.email||'').toLowerCase(); const me=await getCurrentUser(); if(me && (me.email||'').toLowerCase()===email){ await clearCurrentUser(); window.location.href='index.html'; } } }; } catch(_) {}
 </script>
 </body>
 </html>
