@@ -124,6 +124,13 @@
       return schedules[0] || null;
     }
 
+    function getActiveMaintenanceEnd(m){
+      const now = Date.now();
+      if(m && m.manualUntil && now < m.manualUntil) return m.manualUntil;
+      const s = (Array.isArray(m.schedules)? m.schedules:[]).find(s => now>=s.startAt && now<=s.endAt);
+      return s ? s.endAt : null;
+    }
+
     // Listen for maintenance broadcasts for tabs without IndexedDB session control
     try {
       const bc = new BroadcastChannel('smartlms_maint');
@@ -373,7 +380,9 @@
       e.preventDefault();
       const m = await getMaintenance();
       if(isActiveMaintenance(m)){
-        alert(`System is currently undergoing maintenance. Signups are disabled until ${new Date(m.manualUntil||Date.now()).toLocaleString()}.`);
+        const untilTs = getActiveMaintenanceEnd(m);
+        const untilStr = untilTs ? new Date(untilTs).toLocaleString() : 'the scheduled end time';
+        alert(`System is currently undergoing maintenance. Signups are disabled until ${untilStr}.`);
         return;
       }
       const upcoming = getUpcomingMaintenance(m);
@@ -433,7 +442,9 @@
           allow = !!(u && u.role === 'admin');
         } catch(_){ allow = false; }
         if(!allow){
-          alert(`System is currently undergoing maintenance. Only admin login allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`);
+          const untilTs = getActiveMaintenanceEnd(m);
+          const untilStr = untilTs ? new Date(untilTs).toLocaleString() : 'the scheduled end time';
+          alert(`System is currently undergoing maintenance. Only admin login allowed until ${untilStr}.`);
           return;
         }
       }
@@ -536,11 +547,15 @@
           const users = await getUsers();
           const u = users.find(u => u.email === email);
           if(!(u && u.role === 'admin')){
-            document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`;
+            const untilTs = getActiveMaintenanceEnd(m);
+            const untilStr = untilTs ? new Date(untilTs).toLocaleString() : 'the scheduled end time';
+            document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${untilStr}.`;
             return;
           }
         } catch(_){
-          document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${new Date((m.manualUntil)||Date.now()).toLocaleString()}.`;
+          const untilTs = getActiveMaintenanceEnd(m);
+          const untilStr = untilTs ? new Date(untilTs).toLocaleString() : 'the scheduled end time';
+          document.getElementById('resetError').innerText = `System is currently undergoing maintenance. Only admin reset allowed until ${untilStr}.`;
           return;
         }
       }
