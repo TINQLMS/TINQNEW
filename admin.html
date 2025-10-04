@@ -731,7 +731,7 @@ async function renderUsers(){
     container.appendChild(card);
   });
 
-  container.addEventListener('click', async (ev)=>{
+  container.onclick = async (ev)=>{
     const btn = ev.target.closest('[data-act]');
     if(!btn) return;
     const email = btn.getAttribute('data-email');
@@ -781,7 +781,7 @@ async function renderUsers(){
       renderUsers(); return;
     }
     if(act==='unlock'){ u.lockedUntil=null; u.failedAttempts=0; pushNotification(u,'Your account lock was removed by an administrator.'); await Storage.saveUsers(users); renderUsers(); return; }
-  }, { once:true });
+  };
 }
 
 // Modal for Add/Edit User

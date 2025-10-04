@@ -544,6 +544,10 @@ try {
   const __maintBC = new BroadcastChannel('smartlms_maint');
   __maintBC.onmessage = async (ev)=>{
     const msg = ev.data||{};
+    if(msg.type==='maintenance_active' || msg.type==='force_logout'){
+      const me = await getCurrentUser();
+      if(me && me.role !== 'admin'){ await clearCurrentUser(); window.location.href='index.html'; return; }
+    }
     if(msg.type==='maintenance_active' || msg.type==='maintenance_disabled' || msg.type==='force_logout'){
       await showUpcomingMaintenanceIfAny();
     }
@@ -551,6 +555,7 @@ try {
 } catch(_) {}
 window.addEventListener('storage', async (e)=>{
   if(e.key==='smartlms_maint_broadcast'){
+    try{ const msg = JSON.parse(e.newValue||'{}')||{}; if(msg.type==='maintenance_active' || msg.type==='force_logout'){ const me=await getCurrentUser(); if(me && me.role!=='admin'){ await clearCurrentUser(); window.location.href='index.html'; return; } } }catch(_){ }
     await showUpcomingMaintenanceIfAny();
   }
 });

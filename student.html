@@ -137,8 +137,8 @@ setInterval(updateMaintBanner, 1000);
 updateMaintBanner();
 
 // Listen for maintenance broadcasts
-try { const bc = new BroadcastChannel('smartlms_maint'); bc.onmessage = async ()=>{ await updateMaintBanner(); }; } catch(_) {}
-window.addEventListener('storage', async (e)=>{ if(e.key==='smartlms_maint_broadcast'){ try{ const msg=JSON.parse(e.newValue||'{}'); if(msg && msg.type==='force_logout_user'){ const email=(msg.payload&&msg.payload.email||'').toLowerCase(); const me=await getCurrentUser(); if(me && (me.email||'').toLowerCase()===email){ await clearCurrentUser(); window.location.href='index.html'; return; } } }catch(_){ } await updateMaintBanner(); } });
+try { const bc = new BroadcastChannel('smartlms_maint'); bc.onmessage = async (ev)=>{ const msg=ev.data||{}; if(msg.type==='maintenance_active' || msg.type==='force_logout'){ const me=await getCurrentUser(); if(me && me.role!=='admin'){ await clearCurrentUser(); window.location.href='index.html'; return; } } await updateMaintBanner(); }; } catch(_) {}
+window.addEventListener('storage', async (e)=>{ if(e.key==='smartlms_maint_broadcast'){ try{ const msg=JSON.parse(e.newValue||'{}'); if(msg && (msg.type==='maintenance_active' || msg.type==='force_logout')){ const me=await getCurrentUser(); if(me && me.role!=='admin'){ await clearCurrentUser(); window.location.href='index.html'; return; } } if(msg && msg.type==='force_logout_user'){ const email=(msg.payload&&msg.payload.email||'').toLowerCase(); const me=await getCurrentUser(); if(me && (me.email||'').toLowerCase()===email){ await clearCurrentUser(); window.location.href='index.html'; return; } } }catch(_){ } await updateMaintBanner(); } });
 
 // Listen for admin forced logout of a single user
 try { const bc2 = new BroadcastChannel('smartlms_maint'); bc2.onmessage = async (ev)=>{ const msg=ev.data||{}; if(msg.type==='force_logout_user'){ const email=(msg.payload&&msg.payload.email||'').toLowerCase(); const me=await getCurrentUser(); if(me && (me.email||'').toLowerCase()===email){ await clearCurrentUser(); window.location.href='index.html'; } } }; } catch(_) {}
