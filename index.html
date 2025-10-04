@@ -137,7 +137,10 @@
       bc.onmessage = async (ev)=>{ const msg = ev.data||{}; if(msg.type==='maintenance_active'){ await updateMaintBanners(); } if(msg.type==='maintenance_disabled'){ await updateMaintBanners(); } };
     } catch(_) {}
     window.addEventListener('storage', async (e)=>{
-      if(e.key==='smartlms_maint_broadcast'){ await updateMaintBanners(); }
+      if(e.key==='smartlms_maint_broadcast'){
+        try{ const msg = JSON.parse(e.newValue||'{}'); if(msg && msg.type==='force_logout_user'){ const me = await getCurrentUser(); if(me && (me.email||'').toLowerCase() === ((msg.payload&&msg.payload.email||'').toLowerCase())){ await clearCurrentUser(); return; } } }catch(_){ }
+        await updateMaintBanners();
+      }
     });
 
     function mountMaintBanners(){
