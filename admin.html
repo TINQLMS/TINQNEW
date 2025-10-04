@@ -1098,6 +1098,8 @@ async function initMaintenanceUI(){
     await forceLogoutNonAdmins();
     // Broadcast for tabs without IndexedDB session control
     sendMaintenanceBroadcast('maintenance_active', { until });
+    // Ensure non-IDB tabs self-logout instantly
+    sendMaintenanceBroadcast('force_logout', {});
     await refresh();
     alert('Maintenance enabled');
   };
@@ -1174,6 +1176,8 @@ async function showMaintenanceBanner(){
       // Transition to active: force logout non-admins and broadcast
       await forceLogoutNonAdmins();
       sendMaintenanceBroadcast('maintenance_active', { until });
+      // Ensure immediate logout for tabs without IDB by explicit signal
+      sendMaintenanceBroadcast('force_logout', {});
     }
     window.__maintPrevActive = true;
   } else {
