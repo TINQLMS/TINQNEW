@@ -437,12 +437,35 @@ function renderNotifications(user){
     empty.innerText = 'No notifications';
     list.appendChild(empty);
   } else {
+    // Header with clear button
+    const head = document.createElement('div');
+    head.className = 'notif-item';
+    head.style.display = 'flex';
+    head.style.justifyContent = 'space-between';
+    head.style.alignItems = 'center';
+    head.innerHTML = `<strong>Notifications</strong><button class="action-btn" id="notifClearBtn">Clear all</button>`;
+    list.appendChild(head);
     items.forEach(n=>{
       const div = document.createElement('div');
       div.className = 'notif-item';
       div.innerText = `${new Date(n.timestamp).toLocaleString()} - ${n.message}`;
       list.appendChild(div);
     });
+    // Bind clear all
+    const clearBtn = document.getElementById('notifClearBtn');
+    if(clearBtn){
+      clearBtn.onclick = async ()=>{
+        if(!window.__currentAdmin) return;
+        const admin = window.__currentAdmin;
+        admin.notifications = [];
+        const users = await Storage.getUsers();
+        const idx = users.findIndex(u=>u.email===admin.email);
+        if(idx>=0) users[idx] = admin;
+        await Storage.saveUsers(users);
+        document.getElementById('unreadCount').innerText = '';
+        renderNotifications(admin);
+      };
+    }
   }
 }
 function toggleNotifList(){
