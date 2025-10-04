@@ -716,49 +716,13 @@ async function renderUsers(){
     return;
   }
 
-  // Render as table for full details
-  const table = document.createElement('table');
-  table.style.width = '100%';
-  table.style.borderCollapse = 'collapse';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Name</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Email</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Role</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Phone</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Password</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Status</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Joined</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid #eaeaea">Actions</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
-  const tbody = table.querySelector('tbody');
-  filtered.forEach(u => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.fullName||'(no name)'} ${u.flagged?'<span class="badge denied">FLAGGED</span>':''} ${isLockedUser(u)?'<span class="badge pending">LOCKED</span>':''}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.email||''}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.role||''}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.phone||''}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.password||''}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.active===false?'Inactive':'Active'}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">${u.createdAt? new Date(u.createdAt).toLocaleDateString() : 'n/a'}</td>
-      <td style="padding:8px;border-bottom:1px solid #f3f3f3">
-        <button class="action-btn" data-act="edit" data-email="${u.email}">Edit</button>
-        <button class="action-btn secondary" data-act="toggleActive" data-email="${u.email}">${u.active===false ? 'Activate' : 'Deactivate'}</button>
-        <button class="action-btn danger" data-act="delete" data-email="${u.email}">Delete</button>
-        <button class="action-btn secondary" data-act="lock30" data-email="${u.email}">Lock 30m</button>
-        <button class="action-btn secondary" data-act="lock1440" data-email="${u.email}">Lock 24h</button>
-        <button class="action-btn" data-act="unlock" data-email="${u.email}">Unlock</button>
-        <button class="action-btn ${u.flagged ? '' : 'danger'}" data-act="toggleFlag" data-email="${u.email}">${u.flagged ? 'Unflag' : 'Flag'}</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
+  // Render original cards layout with added phone and password line
+  filtered.forEach(u=>{
+    const card = document.createElement('div');
+    card.className = 'user-card';
+    card.innerHTML = userCardHTML(u);
+    container.appendChild(card);
   });
-  container.appendChild(table);
 
   container.addEventListener('click', async (ev)=>{
     const btn = ev.target.closest('button');
