@@ -54,6 +54,11 @@ button.danger:hover{box-shadow:0 4px 8px rgba(245,101,101,.3)}
 .request-block,.user-card{border:1px solid var(--border);padding:15px;margin:10px 0;border-radius:8px;background:#fafbfc;transition:box-shadow .2s}
 .request-block:hover,.user-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
 .small{font-size:13px;color:var(--muted)}
+/* Password reveal UI */
+.pwd-wrap{position:relative;display:inline-block;padding-right:18px}
+.pwd{letter-spacing:2px}
+.pwd-eye{position:absolute;right:0;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:12px;user-select:none}
+.pwd-eye:hover{color:var(--text)}
 .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;background:#e2e8f0;color:var(--text);margin-left:6px;font-weight:600}
 .badge.pending{background:#fef3c7;color:#92400e}
 .badge.approved{background:#d1fae5;color:#065f46}
@@ -675,9 +680,9 @@ function userCardHTML(u){
     ${u.active===false ? '<span class="badge inactive">INACTIVE</span>' : '<span class="badge active">ACTIVE</span>'}
     ${u.flagged ? '<span class="badge denied">FLAGGED</span>' : ''}
     ${isLocked ? '<span class="badge pending">LOCKED</span>' : ''}
-    <div class="small">Phone: ${u.phone || 'n/a'} | Password: <span class="pwd" data-email="${u.email}" data-pass="${(
+    <div class="small">Phone: ${u.phone || 'n/a'} | Password: <span class="pwd-wrap"><span class="pwd" data-masked="true" data-email="${u.email}" data-pass="${(
       u && u.resetRequest && u.resetRequest.status==='approved' && (!u.resetRequest.expiresAt || Date.now() <= u.resetRequest.expiresAt)
-    ) ? ((u.resetRequest.tempPassword||'') + ' (temp)') : (u.password || '')}">••••••••</span> <button type="button" class="secondary" data-act="togglePwd" data-email="${u.email}">Show</button></div>
+    ) ? ((u.resetRequest.tempPassword||'') + ' (temp)') : (u.password || '')}">••••••••</span><span class="pwd-eye" title="Show/Hide" data-act="togglePwd" data-email="${u.email}">👁️</span></span></div>
     <div class="small">Failed Attempts: ${u.failedAttempts||0} | Lockouts: ${u.lockouts||0} | Joined: ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'n/a'}</div>
     ${isLocked ? `<div class="small">Locked Until: ${new Date(u.lockedUntil).toLocaleString()}</div>` : ''}
     <div class="action-grid">
@@ -727,7 +732,7 @@ async function renderUsers(){
   });
 
   container.addEventListener('click', async (ev)=>{
-    const btn = ev.target.closest('button');
+    const btn = ev.target.closest('[data-act]');
     if(!btn) return;
     const email = btn.getAttribute('data-email');
     const act = btn.getAttribute('data-act');
@@ -735,8 +740,8 @@ async function renderUsers(){
       const span = container.querySelector(`.pwd[data-email="${email}"]`);
       if(!span) return;
       const masked = span.getAttribute('data-masked') !== 'false';
-      if(masked){ span.textContent = span.getAttribute('data-pass') || ''; span.setAttribute('data-masked','false'); btn.textContent = 'Hide'; }
-      else { span.textContent = '••••••••'; span.setAttribute('data-masked','true'); btn.textContent = 'Show'; }
+      if(masked){ span.textContent = span.getAttribute('data-pass') || ''; span.setAttribute('data-masked','false'); }
+      else { span.textContent = '••••••••'; span.setAttribute('data-masked','true'); }
       return;
     }
     const users = await Storage.getUsers();
