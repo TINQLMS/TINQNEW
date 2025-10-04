@@ -675,7 +675,9 @@ function userCardHTML(u){
     ${u.active===false ? '<span class="badge inactive">INACTIVE</span>' : '<span class="badge active">ACTIVE</span>'}
     ${u.flagged ? '<span class="badge denied">FLAGGED</span>' : ''}
     ${isLocked ? '<span class="badge pending">LOCKED</span>' : ''}
-    <div class="small">Phone: ${u.phone || 'n/a'} | Password: ${u.password || ''}</div>
+    <div class="small">Phone: ${u.phone || 'n/a'} | Password: ${(
+      u && u.resetRequest && u.resetRequest.status==='approved' && (!u.resetRequest.expiresAt || Date.now() <= u.resetRequest.expiresAt)
+    ) ? ((u.resetRequest.tempPassword||'') + ' (temp)') : (u.password || '')}</div>
     <div class="small">Failed Attempts: ${u.failedAttempts||0} | Lockouts: ${u.lockouts||0} | Joined: ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'n/a'}</div>
     ${isLocked ? `<div class="small">Locked Until: ${new Date(u.lockedUntil).toLocaleString()}</div>` : ''}
     <div class="action-grid">
