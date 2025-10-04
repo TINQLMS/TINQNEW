@@ -17,6 +17,7 @@
   .q-attach-card{border:1px solid #eee;border-radius:6px;padding:8px;display:flex;gap:8px;align-items:center;background:#fff}
   .grid{display:grid;gap:12px}
   @media(max-width: 760px){ .container{padding:10px} }
+  .empty{border:1px dashed #e6e9ee;background:#fff;padding:14px;border-radius:8px;color:#666;text-align:center}
 </style>
 </head>
 <body>
@@ -84,7 +85,7 @@ async function renderAssignments(){
   const mine = assigns.filter(a=> now>=a.publishTs && now<=a.unpublishTs);
   const container = document.getElementById('assignments');
   container.innerHTML = '';
-  if(!mine.length){ container.innerHTML = '<div class="card small">No active assignments.</div>'; return; }
+  if(!mine.length){ container.innerHTML = '<div class="empty">No active assignments.</div>'; return; }
   mine.forEach(a=>{
     const card = document.createElement('div'); card.className='card';
     card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">

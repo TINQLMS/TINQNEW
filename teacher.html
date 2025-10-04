@@ -49,6 +49,7 @@
   .recent-item{font-size:13px;padding:6px;border-bottom:1px solid #f0f0f0}
   .label{font-size:12px;color:#666}
   .badge{display:inline-block;background:#eef2ff;color:var(--purple);padding:2px 8px;border-radius:999px;font-size:12px}
+  .empty{border:1px dashed #e6e9ee;background:#fff;padding:14px;border-radius:8px;color:#666;text-align:center}
   footer{height:40px;background:#fff;border-top:1px solid #e6e9ee;display:flex;align-items:center;justify-content:center;font-size:13px}
   .small-note{font-size:12px;color:#444}
   .grid-questions{display:grid;gap:8px}
@@ -1608,12 +1609,12 @@ function renderOverview(){
     document.getElementById('statAssignments').innerText = myAssigns.length;
     const ov = document.getElementById('overviewRecent');
     const top = myAssigns.slice().sort((a,b)=> (b.publishTs||0)-(a.publishTs||0)).slice(0,5);
-    ov.innerHTML = top.length ? top.map(a=>`<div class="recent-item"><span class="badge">${new Date(a.publishTs).toLocaleDateString()}</span> ${escapeHtml(a.title)}</div>`).join('') : '<div class="small-muted">No assignments yet</div>';
+    ov.innerHTML = top.length ? top.map(a=>`<div class="recent-item"><span class="badge">${new Date(a.publishTs).toLocaleDateString()}</span> ${escapeHtml(a.title)}</div>`).join('') : '<div class="empty">No assignments yet</div>';
   });
   readUsers(users=>{
     const me = users.find(u=> (u.email||'').toLowerCase()===currentEmail);
     const nots = me && me.notifications ? me.notifications.slice().reverse().slice(0,6) : [];
-    document.getElementById('overviewNotifs').innerHTML = nots.map(n=>`<div class="recent-item">${escapeHtml(n.message)}</div>`).join('') || '<div class="small-muted">No notifications</div>';
+    document.getElementById('overviewNotifs').innerHTML = nots.map(n=>`<div class="recent-item">${escapeHtml(n.message)}</div>`).join('') || '<div class="empty">No notifications</div>';
 
     // Populate profile dropdown info
     const nameEl = document.getElementById('profileName');

@@ -55,6 +55,7 @@ button.danger:hover{box-shadow:0 4px 8px rgba(245,101,101,.3)}
 .request-block:hover,.user-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
 .small{font-size:13px;color:var(--muted)}
 .small-muted{font-size:12px;color:var(--muted)}
+.empty{border:1px dashed var(--border);background:#fff;padding:14px;border-radius:8px;color:var(--muted);text-align:center}
 /* Password reveal UI */
 .pwd-wrap{position:relative;display:inline-block;padding-right:18px}
 .pwd{letter-spacing:2px}
@@ -568,7 +569,7 @@ async function renderResetRequests(){
 
   if(!list.length){
     const empty = document.createElement('div');
-    empty.className = 'small';
+    empty.className = 'empty';
     empty.innerText = 'No password reset requests matching filter.';
     container.appendChild(empty);
     await Storage.saveUsers(users);
@@ -597,7 +598,7 @@ async function renderResetRequests(){
     container.appendChild(div);
   });
 
-  container.addEventListener('click', async (ev)=>{
+  container.onclick = async (ev)=>{
     const t = ev.target.closest('button');
     if(!t) return;
     const email = t.getAttribute('data-email');
@@ -628,7 +629,7 @@ async function renderResetRequests(){
     await Storage.saveUsers(users);
     renderResetRequests();
     updateStats();
-  }, { once:true });
+  };
 }
 
 async function bulkApproveResets(){
@@ -720,7 +721,7 @@ async function renderUsers(){
   container.innerHTML = '';
   if(!filtered.length){
     const empty = document.createElement('div');
-    empty.className = 'small';
+    empty.className = 'empty';
     empty.innerText = 'No users found matching filters.';
     container.appendChild(empty);
     return;
