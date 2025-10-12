@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smartlms MFA PIN setup</title>
+  <style>
+    :root{--bg:#f6f9ff;--card:#fff;--accent:#0369a1;--danger:#dc2626}
+    body{font-family:Inter,system-ui,Arial;margin:0;background:var(--bg);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px}
+    .card{background:var(--card);border-radius:12px;box-shadow:0 8px 30px rgba(5,15,40,.06);padding:20px;max-width:900px;width:100%}
+    h1{margin:0 0 8px;font-size:18px}
+    p.lead{margin:0 0 14px;color:#475569}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    label{display:block;font-size:13px;color:#334155;margin-bottom:6px}
+    input[type="text"], input[type="password"]{
+      width:100%;padding:10px;border-radius:8px;border:1px solid #e6eef8;background:#fbfdff;font-size:14px;box-sizing:border-box
+    }
+    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid #e6eef8;color:#0f172a}
+    .muted{color:#64748b;font-size:13px}
+    .footer{display:flex;gap:8px;margin-top:12px;align-items:center}
+    .right{margin-left:auto}
+    .danger{color:var(--danger)}
+    .status{padding:8px;border-radius:10px;background:#f8fafc;border:1px solid #eef2ff;font-size:13px}
+    .modal{position:fixed;inset:0;background:rgba(2,6,23,0.45);display:flex;align-items:center;justify-content:center;padding:20px}
+    .box{background:#fff;padding:18px;border-radius:12px;max-width:460px;width:100%}
+    table{width:100%;border-collapse:collapse}
+    th, td{padding:8px;text-align:left;border-bottom:1px solid #f1f5f9;font-size:13px}
+    .small{font-size:13px;color:#475569}
+    .kbd{font-family:monospace;background:#f1f5f9;padding:4px 8px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Two-step verification (6-digit PIN) — (JWT device claims)</h1>
+    <p class="lead">Frontend. Uses <strong>IndexedDB</strong> with fallback to <strong>localStorage</strong>. PBKDF2 for PIN hashing. Trusted-device tokens are JWTs created client-side (HMAC-SHA256) — in production sign JWTs on server.</p>
+
+    <div class="grid">
+      <div>
+        <label>User ID</label>
+        <input id="userId" type="text" placeholder="user-1" value="user-1" />
+        <p class="muted">Change to different accounts.</p>
+
+        <label style="margin-top:12px">Device ID (auto)</label>
+        <input id="deviceId" type="text" readonly />
+        <p class="muted">Device fingerprint used inside JWT claims.</p>
+
+        <hr style="margin:12px 0">
+
+        <label>Set / Update 6-digit PIN</label>
+        <input id="pinSetup" type="password" maxlength="6" placeholder="Enter 6-digit PIN" />
+        <div class="footer">
+          <button id="btnSetPin">Set PIN</button>
+          <button id="btnClearPin" class="ghost">Clear PIN</button>
+          <div class="right muted" id="pinStatus"></div>
+        </div>
+
+        <hr style="margin:12px 0">
+
+        <label>Login</label>
+        <div style="display:flex;gap:8px">
+          <button id="btnLogin">Login (auto-check MFA)</button>
+          <button id="btnForcePrompt" class="ghost">Force PIN Prompt</button>
+        </div>
+        <div id="loginLog" style="margin-top:10px"></div>
+      </div>
+
+      <div>
+        <label>Trusted Devices</label>
+        <div class="status" id="trustedStatus">Loading...</div>
+        <div style="margin-top:10px">
+          <table id="trustedTable"><thead><tr><th>token (jti)</th><th>deviceId</th><th>expires</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <hr style="margin:12px 0">
+
+        <label>Settings</label>
+        <div class="muted small">
+          <div>Max attempts before lockout: <strong id="cfgAttempts">5</strong></div>
+          <div>Lockout minutes: <strong id="cfgLock">15</strong></div>
+          <div>Trusted device expiry days: <strong id="cfgTrust">30</strong></div>
+          <div>Re-verify after (days): <strong id="cfgReverify">7</strong></div>
+        </div>
+
+        <hr style="margin:12px 0">
+
+        <div class="muted small">Security note: This creates and verifies JWTs client-side. In real apps, sign JWTs server-side and keep secrets private.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PIN modal -->
+  <div id="pinModal" class="modal" style="display:none">
+    <div class="box">
+      <h3>Two-step verification</h3>
+      <p class="small">Enter your 6-digit PIN to continue.</p>
+      <div style="margin-top:10px">
+        <input id="pinInput" type="password" maxlength="6" placeholder="••••••" />
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input id="rememberDevice" type="checkbox" checked /> Remember this device (30 days)
+          </label>
+          <div class="right small muted">Attempts left: <span id="attemptsLeft">5</span></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button id="btnVerifyPin">Verify</button>
+          <button id="btnCancelPin" class="ghost">Cancel</button>
+        </div>
+        <p id="pinError" class="danger" style="margin-top:8px"></p>
+        <p class="small" id="lockoutInfo" style="display:none"></p>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  Full implementing:
+  - PIN storage & PBKDF2 hashing (WebCrypto)
+  - IndexedDB with fallback to localStorage
+  - Trusted device JWT generation (HMAC-SHA256) and verification (client-side)
+  - Remember device option
+  - Rate-limited retries & lockout
+  - Re-verification policy
+*/
+
+// ---------- Config ----------
+const MAX_ATTEMPTS = 5;
+const LOCK_MINUTES = 15;
+const TRUST_DAYS = 30;
+const REVERIFY_DAYS = 7;
+const PBKDF2_ITER = 150000; // server-side can use bcrypt or higher params
+
+// ---------- Utility helpers ----------
+const toB64 = arr => btoa(String.fromCharCode(...new Uint8Array(arr)));
+const fromB64 = s => Uint8Array.from(atob(s), c=>c.charCodeAt(0));
+const base64url = s => s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const nowISO = () => new Date().toISOString();
+const inMs = (days=0,hours=0,mins=0) => ((days*24+hours)*60 + mins)*60*1000;
+const uuidv4 = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=> {
+  const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
+  const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  return v.toString(16);
+});
+
+// ---------- WebCrypto PBKDF2 (PIN hashing) ----------
+async function derivePin(pin, saltBase64 = null, iterations = PBKDF2_ITER) {
+  const enc = new TextEncoder();
+  const pinBytes = enc.encode(pin);
+  let salt;
+  if (!saltBase64) {
+    salt = crypto.getRandomValues(new Uint8Array(16));
+    saltBase64 = toB64(salt);
+  } else {
+    salt = fromB64(saltBase64);
+  }
+  const keyMat = await crypto.subtle.importKey('raw', pinBytes, 'PBKDF2', false, ['deriveBits']);
+  const derived = await crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations, hash:'SHA-256'}, keyMat, 256);
+  return { key: toB64(derived), salt: saltBase64, iterations };
+}
+
+// ---------- Client-side HMAC-SHA256 JWT ----------
+async function importHmacKey(secret) {
+  const enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(secret), {name:'HMAC', hash:'SHA-256'}, false, ['sign','verify']);
+}
+function encodeJSONBase64url(obj) {
+  return base64url(btoa(unescape(encodeURIComponent(JSON.stringify(obj)))));
+}
+function decodeJSONBase64url(b64) {
+  const s = decodeURIComponent(escape(atob(b64.replace(/-/g,'+').replace(/_/g,'/'))));
+  return JSON.parse(s);
+}
+async function signHMAC(payloadObj, secret) {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const headerB64 = encodeJSONBase64url(header);
+  const payloadB64 = encodeJSONBase64url(payloadObj);
+  const toSign = headerB64 + '.' + payloadB64;
+  const key = await importHmacKey(secret);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(toSign));
+  const sigB64 = base64url(toB64(sig));
+  return `${toSign}.${sigB64}`;
+}
+async function verifyHMAC(jwt, secret) {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, sigB64] = parts;
+    const toSign = headerB64 + '.' + payloadB64;
+    const key = await importHmacKey(secret);
+    const sig = fromB64(sigB64.replace(/-/g,'+').replace(/_/g,'/'));
+    const ok = await crypto.subtle.verify('HMAC', key, sig, new TextEncoder().encode(toSign));
+    if (!ok) return null;
+    const payload = decodeJSONBase64url(payloadB64);
+    // check exp
+    if (payload.exp && Date.now() >= payload.exp * 1000) return null;
+    return payload;
+  } catch (e) { return null; }
+}
+
+// ---------- Storage: IndexedDB wrapper with localStorage fallback ----------
+const DB_NAME = 'mfa_jwt_db';
+const STORE_USERS = 'users';
+const STORE_DEVICES = 'trusted_devices';
+let idbAvailable = 'indexedDB' in window;
+
+function openIdb() {
+  return new Promise((resolve,reject) => {
+    if (!idbAvailable) return reject(new Error('IDB not available'));
+    const rq = indexedDB.open(DB_NAME, 1);
+    rq.onupgradeneeded = ev => {
+      const db = ev.target.result;
+      if (!db.objectStoreNames.contains(STORE_USERS)) db.createObjectStore(STORE_USERS, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORE_DEVICES)) db.createObjectStore(STORE_DEVICES, { keyPath: 'jti' });
+    };
+    rq.onsuccess = ev => resolve(ev.target.result);
+    rq.onerror = ev => reject(ev.target.error);
+  });
+}
+async function putRecord(store, val) {
+  if (!idbAvailable) return lsPut(store, val);
+  const db = await openIdb();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(val);
+    tx.oncomplete = () => res(true);
+    tx.onerror = e => rej(e.target.error);
+  });
+}
+async function getRecord(store, key) {
+  if (!idbAvailable) return lsGet(store, key);
+  const db = await openIdb();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const r = tx.objectStore(store).get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = e => rej(e.target.error);
+  });
+}
+async function deleteRecord(store, key) {
+  if (!idbAvailable) return lsDel(store, key);
+  const db = await openIdb();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const r = tx.objectStore(store).delete(key);
+    r.onsuccess = () => res(true);
+    r.onerror = e => rej(e.target.error);
+  });
+}
+async function allRecords(store) {
+  if (!idbAvailable) return lsAll(store);
+  const db = await openIdb();
+  return new Promise((res,rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).openCursor();
+    const out = [];
+    req.onsuccess = e => {
+      const cur = e.target.result;
+      if (!cur) return res(out);
+      out.push(cur.value);
+      cur.continue();
+    };
+    req.onerror = e => rej(e.target.error);
+  });
+}
+function lsKey(store, key) { return `mfa_demo::${store}::${key}`; }
+function lsPut(store, val) {
+  const key = val.id ?? val.jti;
+  localStorage.setItem(lsKey(store, key), JSON.stringify(val));
+  return Promise.resolve(true);
+}
+function lsGet(store, key) {
+  const raw = localStorage.getItem(lsKey(store, key));
+  return Promise.resolve(raw ? JSON.parse(raw) : undefined);
+}
+function lsDel(store, key) { localStorage.removeItem(lsKey(store, key)); return Promise.resolve(true); }
+function lsAll(store) {
+  const out = [];
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (!k.startsWith(`mfa_demo::${store}::`)) continue;
+    try { out.push(JSON.parse(localStorage.getItem(k))); } catch(e){}
+  }
+  return Promise.resolve(out);
+}
+
+// ---------- App-level user / device functions ----------
+async function ensureUser(userId) {
+  let u = await getRecord(STORE_USERS, userId);
+  if (!u) {
+    u = { id: userId, mfa_pin: null, mfa_failed_attempts: 0, mfa_locked_until: null, last_mfa_verified_at: null };
+    await putRecord(STORE_USERS, u);
+  }
+  return u;
+}
+
+async function setPIN(userId, pin) {
+  if (!/^\d{6}$/.test(pin)) throw new Error('PIN must be 6 digits');
+  const u = await ensureUser(userId);
+  const { key, salt, iterations } = await derivePin(pin, null);
+  u.mfa_pin = { key, salt, iterations };
+  u.mfa_failed_attempts = 0;
+  u.mfa_locked_until = null;
+  await putRecord(STORE_USERS, u);
+  return true;
+}
+
+async function clearPIN(userId) {
+  const u = await ensureUser(userId);
+  u.mfa_pin = null;
+  u.mfa_failed_attempts = 0;
+  u.mfa_locked_until = null;
+  u.last_mfa_verified_at = null;
+  await putRecord(STORE_USERS, u);
+  return true;
+}
+
+async function verifyPIN(userId, inputPin) {
+  const u = await ensureUser(userId);
+  if (!u.mfa_pin) throw new Error('MFA not configured');
+  if (u.mfa_locked_until && new Date(u.mfa_locked_until) > new Date()) {
+    const e = new Error('Account locked');
+    e.lockedUntil = u.mfa_locked_until;
+    throw e;
+  }
+  const derived = await derivePin(inputPin, u.mfa_pin.salt, u.mfa_pin.iterations);
+  if (derived.key !== u.mfa_pin.key) {
+    u.mfa_failed_attempts = (u.mfa_failed_attempts || 0) + 1;
+    if (u.mfa_failed_attempts >= MAX_ATTEMPTS) {
+      u.mfa_failed_attempts = 0;
+      u.mfa_locked_until = new Date(Date.now() + inMs(0,0,LOCK_MINUTES)).toISOString();
+    }
+    await putRecord(STORE_USERS, u);
+    return { success:false, attemptsLeft: Math.max(0, MAX_ATTEMPTS - u.mfa_failed_attempts), lockedUntil: u.mfa_locked_until || null };
+  }
+  // success
+  u.mfa_failed_attempts = 0;
+  u.mfa_locked_until = null;
+  u.last_mfa_verified_at = nowISO();
+  await putRecord(STORE_USERS, u);
+  return { success:true };
+}
+
+// ---------- Trusted device JWT issuance (client-side) ----------
+/*
+  JWT payload:
+  {
+    sub: userId,
+    deviceId,
+    iat: <sec>,
+    exp: <sec>,
+    jti: <uuid>
+  }
+  Sign with a client-side secret (in prod server signs)
+*/
+const CLIENT_SECRET_KEY_NAME = 'mfa_demo_client_secret'; // stored in local storage
+async function getOrCreateClientSecret() {
+  let s = localStorage.getItem(CLIENT_SECRET_KEY_NAME);
+  if (!s) {
+    s = uuidv4(); // random secret for demo
+    localStorage.setItem(CLIENT_SECRET_KEY_NAME, s);
+  }
+  return s;
+}
+async function issueTrustedJwt(userId, deviceId, days = TRUST_DAYS) {
+  const secret = await getOrCreateClientSecret();
+  const jti = uuidv4();
+  const iat = Math.floor(Date.now()/1000);
+  const exp = iat + days*24*60*60;
+  const payload = { sub:userId, deviceId, iat, exp, jti };
+  const token = await signHMAC(payload, secret);
+  // store record in trusted_devices store
+  const rec = { jti, userId, deviceId, token, created_at: nowISO(), expires_at: new Date(exp*1000).toISOString() };
+  await putRecord(STORE_DEVICES, rec);
+  // persist quick-access token in localStorage for this browser
+  localStorage.setItem('mfa_trusted_token', token);
+  return rec;
+}
+async function verifyTrustedJwt(token) {
+  const secret = await getOrCreateClientSecret();
+  return verifyHMAC(token, secret); // returns payload or null
+}
+async function findTrustedRecordByToken(token) {
+  // token -> decode payload -> find rec in DB by jti
+  const payload = await verifyTrustedJwt(token);
+  if (!payload) return null;
+  const rec = await getRecord(STORE_DEVICES, payload.jti);
+  if (!rec) return null;
+  if (new Date(rec.expires_at) <= new Date()) return null;
+  if (rec.token !== token) return null;
+  return rec;
+}
+
+// check whether device is trusted for user
+async function isDeviceTrusted(userId, deviceId) {
+  const token = localStorage.getItem('mfa_trusted_token');
+  if (token) {
+    const rec = await findTrustedRecordByToken(token);
+    if (rec && rec.userId === userId && rec.deviceId === deviceId) return true;
+  }
+  // fallback scan
+  const all = await allRecords(STORE_DEVICES);
+  for (const r of all) {
+    if (r.userId === userId && r.deviceId === deviceId && new Date(r.expires_at) > new Date()) return true;
+  }
+  return false;
+}
+
+// ---------- When to prompt MFA ----------
+async function shouldPromptMFA(userId, deviceId) {
+  const u = await ensureUser(userId);
+  if (!u.mfa_pin) return { prompt:false, reason:'no_pin' };
+  // if trusted device -> no prompt
+  if (await isDeviceTrusted(userId, deviceId)) return { prompt:false, reason:'trusted_device' };
+  if (!u.last_mfa_verified_at) return { prompt:true, reason:'never_verified' };
+  const hoursSince = (Date.now() - new Date(u.last_mfa_verified_at).getTime())/(1000*60*60);
+  if (hoursSince > (24*REVERIFY_DAYS)) return { prompt:true, reason:'stale' };
+  return { prompt:false, reason:'recent' };
+}
+
+// ---------- UI wiring ----------
+const userIdEl = document.getElementById('userId');
+const deviceIdEl = document.getElementById('deviceId');
+const pinSetupEl = document.getElementById('pinSetup');
+const btnSetPin = document.getElementById('btnSetPin');
+const btnClearPin = document.getElementById('btnClearPin');
+const pinStatusEl = document.getElementById('pinStatus');
+const btnLogin = document.getElementById('btnLogin');
+const btnForce = document.getElementById('btnForcePrompt');
+const loginLog = document.getElementById('loginLog');
+const trustedStatus = document.getElementById('trustedStatus');
+const trustedTableBody = document.querySelector('#trustedTable tbody');
+const cfgAttempts = document.getElementById('cfgAttempts');
+const cfgLock = document.getElementById('cfgLock');
+const cfgTrust = document.getElementById('cfgTrust');
+const cfgReverify = document.getElementById('cfgReverify');
+
+const modal = document.getElementById('pinModal');
+const pinInput = document.getElementById('pinInput');
+const rememberChk = document.getElementById('rememberDevice');
+const btnVerifyPin = document.getElementById('btnVerifyPin');
+const btnCancelPin = document.getElementById('btnCancelPin');
+const pinError = document.getElementById('pinError');
+const attemptsLeftEl = document.getElementById('attemptsLeft');
+const lockoutInfo = document.getElementById('lockoutInfo');
+
+let currentContext = null; // { userId, deviceId }
+
+cfgAttempts.textContent = MAX_ATTEMPTS;
+cfgLock.textContent = LOCK_MINUTES;
+cfgTrust.textContent = TRUST_DAYS;
+cfgReverify.textContent = REVERIFY_DAYS;
+
+function log(msg, level='') {
+  const d = document.createElement('div');
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  if (level === 'error') d.style.color = 'var(--danger)';
+  if (level === 'success') d.style.color = 'green';
+  loginLog.prepend(d);
+}
+
+async function refreshPinStatus() {
+  const u = await getRecord(STORE_USERS, userIdEl.value);
+  pinStatusEl.innerHTML = u && u.mfa_pin ? '<span style="color:green">PIN set</span>' : '<span class="muted">No PIN</span>';
+}
+
+async function refreshTrustedTable() {
+  const all = await allRecords(STORE_DEVICES);
+  trustedTableBody.innerHTML = '';
+  if (all.length === 0) trustedStatus.textContent = 'No trusted devices stored';
+  else trustedStatus.textContent = `${all.length} trusted device(s)`;
+  for (const r of all) {
+    const tr = document.createElement('tr');
+    const jtiTd = document.createElement('td'); jtiTd.textContent = r.jti.slice(0,8);
+    const devTd = document.createElement('td'); devTd.textContent = r.deviceId;
+    const expTd = document.createElement('td'); expTd.textContent = new Date(r.expires_at).toLocaleString();
+    const actTd = document.createElement('td');
+    const btn = document.createElement('button'); btn.className='ghost'; btn.textContent='Remove';
+    btn.onclick = async () => { await deleteRecord(STORE_DEVICES, r.jti); localStorage.removeItem('mfa_trusted_token'); refreshTrustedTable(); log('Trusted device removed', 'success'); };
+    actTd.appendChild(btn);
+    tr.appendChild(jtiTd); tr.appendChild(devTd); tr.appendChild(expTd); tr.appendChild(actTd);
+    trustedTableBody.appendChild(tr);
+  }
+}
+
+btnSetPin.addEventListener('click', async () => {
+  try {
+    const uid = userIdEl.value.trim(); if (!uid) return alert('Enter user id');
+    const pin = pinSetupEl.value.trim(); if (!/^\d{6}$/.test(pin)) return alert('PIN must be 6 digits');
+    await setPIN(uid, pin);
+    pinSetupEl.value = '';
+    await refreshPinStatus();
+    log(`PIN set for ${uid}`, 'success');
+    await refreshTrustedTable();
+  } catch (e) { alert(e.message || e); }
+});
+
+btnClearPin.addEventListener('click', async () => {
+  const uid = userIdEl.value.trim(); if (!uid) return alert('Enter user id');
+  await clearPIN(uid); await refreshPinStatus(); log(`PIN cleared for ${uid}`); await refreshTrustedTable();
+});
+
+btnLogin.addEventListener('click', async () => {
+  const uid = userIdEl.value.trim(); if (!uid) return alert('Enter user id');
+  const check = await shouldPromptMFA(uid, deviceIdEl.value);
+  if (!check.prompt) { log(`Login allowed for ${uid} — reason: ${check.reason}`, 'success'); return; }
+  currentContext = { userId: uid, deviceId: deviceIdEl.value };
+  openPinModal(uid);
+});
+
+btnForce.addEventListener('click', async () => {
+  const uid = userIdEl.value.trim(); if (!uid) return alert('Enter user id');
+  currentContext = { userId: uid, deviceId: deviceIdEl.value };
+  openPinModal(uid);
+});
+
+function openPinModal(uid) {
+  pinError.textContent = ''; lockoutInfo.style.display = 'none'; modal.style.display = 'flex'; pinInput.value = '';
+  attemptsLeftEl.textContent = MAX_ATTEMPTS;
+  (async () => {
+    const u = await ensureUser(uid);
+    if (u.mfa_locked_until && new Date(u.mfa_locked_until) > new Date()) {
+      lockoutInfo.style.display = 'block';
+      lockoutInfo.textContent = `Account locked until ${new Date(u.mfa_locked_until).toLocaleString()}`;
+    } else {
+      attemptsLeftEl.textContent = MAX_ATTEMPTS - (u.mfa_failed_attempts || 0);
+    }
+  })();
+  pinInput.focus();
+}
+
+btnCancelPin.addEventListener('click', () => { modal.style.display = 'none'; currentContext = null; });
+
+btnVerifyPin.addEventListener('click', async () => {
+  if (!currentContext) return;
+  const v = pinInput.value.trim(); if (!/^\d{6}$/.test(v)) { pinError.textContent = 'Enter a 6-digit PIN'; return; }
+  try {
+    const res = await verifyPIN(currentContext.userId, v);
+    if (!res.success) {
+      attemptsLeftEl.textContent = res.attemptsLeft ?? MAX_ATTEMPTS;
+      if (res.lockedUntil) { lockoutInfo.style.display='block'; lockoutInfo.textContent = `Locked until ${new Date(res.lockedUntil).toLocaleString()}`; }
+      pinError.textContent = 'Incorrect PIN';
+      log(`Incorrect PIN for ${currentContext.userId}`, 'error');
+      return;
+    }
+    // success
+    log(`MFA verified for ${currentContext.userId}`, 'success');
+    if (rememberChk.checked) {
+      const rec = await issueTrustedJwt(currentContext.userId, currentContext.deviceId, TRUST_DAYS);
+      log(`Device remembered until ${new Date(rec.expires_at).toLocaleString()}`, 'success');
+    }
+    modal.style.display = 'none';
+    currentContext = null;
+    await refreshTrustedTable();
+  } catch (e) {
+    if (e.lockedUntil) { lockoutInfo.style.display='block'; lockoutInfo.textContent = `Locked until ${new Date(e.lockedUntil).toLocaleString()}`; }
+    pinError.textContent = e.message || 'Error';
+    log(`Error verifying PIN: ${e.message || e}`, 'error');
+  }
+});
+
+// ---------- Device id generation ----------
+async function generateDeviceId() {
+  const ua = navigator.userAgent || 'unknown';
+  const seed = localStorage.getItem('mfa_device_seed') || uuidv4();
+  localStorage.setItem('mfa_device_seed', seed);
+  const enc = new TextEncoder();
+  const data = enc.encode(ua + '||' + seed);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  // base64url shorter
+  return base64url(toB64(hash)).slice(0, 32);
+}
+
+// ---------- Initialization ----------
+(async function init() {
+  try {
+    const dev = await generateDeviceId();
+    deviceIdEl.value = dev;
+  } catch(e) {
+    deviceIdEl.value = 'unknown-device';
+  }
+  await refreshPinStatus();
+  await refreshTrustedTable();
+})();
+
+// expose API for debugging if needed
+window._mfa = {
+  setPIN, clearPIN, verifyPIN, shouldPromptMFA, issueTrustedJwt, verifyTrustedJwt, isDeviceTrusted,
+  allRecords, getRecord, putRecord, deleteRecord
+};
+
+</script>
+</body>
+</html>
